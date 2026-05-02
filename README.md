@@ -1,2 +1,49 @@
 # retro-combat-lab
-A tiny SFC-inspired one-screen roguelite combat prototype built with React and TypeScript.
+
+SFC風の暗色レトロUIで遊ぶ、1画面ターン制ローグライト戦闘MVPです。
+
+## 起動方法
+
+```bash
+# ビルド
+npm run build
+
+# ローカル起動（http://localhost:4173）
+npm run start
+```
+
+> `index.html` が `dist/main.js` を読み込むため、先に `npm run build` を実行してください。
+
+## 操作方法
+
+- **Attack (3STA)**: 通常攻撃。近距離ほど命中・威力が安定。
+- **Heavy Attack (6STA)**: 高威力。命中時に敵へ出血を付与する可能性あり。
+- **Guard (2STA)**: 次に受ける敵攻撃ダメージを軽減。
+- **Step Back (2STA)**: 距離を1伸ばす。被弾しづらくなるが攻撃命中が落ちる。
+- **Rest (0STA)**: スタミナ大回復。ただし敵ターンは進む。
+- **Restart**: 戦闘を初期化して再開。
+
+## ゲームルール
+
+- プレイヤー行動 → 敵行動のターン制。
+- スタミナ不足の行動は実行不可。
+- 距離 (`0` 密着〜`3` 遠距離) に応じて攻撃命中率・ダメージ補正が変動。
+- Guard は次の被弾にのみ有効。
+- Step Back は安全性を上げる代わりに攻撃効率を下げる。
+- Rest はスタミナ回復行動だが無防備。
+- HPが0以下で敗北/勝利が確定。
+- 戦闘ログは最新10件を表示。
+
+## 実装メモ
+
+- TypeScriptで状態・行動処理・UI描画を分離。
+- 乱数は `roll` 経由で関数化。
+- Canvas + CSSのみで表示（外部画像素材なし）。
+
+## 今後の改善 TODO
+
+- 行動選択の敵AIを複数パターン化（慎重/狂戦士など）。
+- 武器種（槍・斧など）と間合い特性の追加。
+- ツールチップとチュートリアル強化。
+- バランス調整用の簡易シード固定モード。
+- 小さなSE（WebAudio）と画面揺れ演出。

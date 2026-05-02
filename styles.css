@@ -1,0 +1,18 @@
+:root { color-scheme: dark; }
+body {
+  margin: 0;
+  background: radial-gradient(circle at top, #1e2333 0%, #0f111a 60%);
+  color: #d7f3ff;
+  font-family: "Courier New", monospace;
+}
+#app { max-width: 980px; margin: 20px auto; padding: 14px; }
+.panel { border: 2px solid #71f0ff; background: #11182b; padding: 10px; box-shadow: inset 0 0 0 2px #203554; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.canvas-wrap { margin: 10px 0; }
+canvas { width: 100%; height: 220px; background: #0b0f1c; border: 2px solid #8ad8ff; image-rendering: pixelated; }
+.commands { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+button { background: #23395e; color: #dcf8ff; border: 2px solid #7ec4ff; padding: 8px; cursor: pointer; font-family: inherit; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+.log { max-height: 180px; overflow: auto; font-size: 13px; line-height: 1.4; }
+.badge { display: inline-block; border: 1px solid #7ec4ff; padding: 1px 6px; margin-left: 6px; }
+.footer { margin-top: 10px; font-size: 12px; color: #9cc9e4; }
