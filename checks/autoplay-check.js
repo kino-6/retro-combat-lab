@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
 import {
-  SITES,
+  CONFIG,
+  advanceRoute,
+  canFieldPatch,
   canUseCombatAction,
   chooseBackground,
   chooseGrowth,
   cookMeal,
   defenseCost,
   endDay,
+  fieldPatchUp,
+  getAvailableSites,
   getSiteProfile,
   initialState,
   infirmaryCost,
@@ -61,6 +65,12 @@ for (let seed = 1; seed <= RUNS; seed += 1) {
       localSawUpgrade ||= state.base.defense > beforeDefense || state.base.infirmaryLevel > beforeInfirmary;
       localSawRepair ||= state.weapon.condition > beforeWeapon;
     } else if (state.phase === 'aftermath') {
+      if (state.player.hp <= 28 && canFieldPatch(state) && rng() < 0.75) {
+        state = fieldPatchUp(state);
+        assertValidState(state, seed, steps);
+        continue;
+      }
+
       const shouldReturn = state.player.hp < 22
         || resourceTotal(state.haul) >= 8
         || expeditionDepth >= 2
@@ -117,9 +127,10 @@ function playBaseTurn(state, rng, sortiesToday) {
   if (state.weapon.condition <= 8 && state.base.materials >= weaponRepairCost(state)) return repairWeapon(state);
   if (state.base.materials >= defenseCost(state) && state.base.defense < 4) return reinforceDefense(state);
   if (state.base.materials >= infirmaryCost(state) && state.base.medicine > 1 && state.base.infirmaryLevel < 3) return upgradeInfirmary(state);
-  if (sortiesToday >= 2 + (state.player.hp > 30 ? 1 : 0)) return endDay(state);
+  if (shouldAdvance(state, sortiesToday)) return advanceRoute(state, rng);
+  if (sortiesToday >= 2 + (state.player.hp > 30 ? 1 : 0)) return endDay(state, rng);
   if (shouldExplore(state)) return startExploration(state, chooseAffordableSite(state, rng), rng);
-  return endDay(state);
+  return endDay(state, rng);
 }
 
 function playCombatTurn(state, rng) {
@@ -133,8 +144,12 @@ function playCombatTurn(state, rng) {
   if (state.combat.turn > 25) return retreat(state);
   if (state.player.stamina < 3) return stepCombat(state, 'rest', rng);
   if (enemy.hp <= 10 && canUseCombatAction(state, 'heavy')) return stepCombat(state, 'heavy', rng);
+  if (enemy.hp <= 7 && distance >= 1 && canUseCombatAction(state, 'throwStone')) return stepCombat(state, 'throwStone', rng);
   if (enemy.hp <= 10) return stepCombat(state, 'attack', rng);
   if ((distance >= 2 || outnumbered) && canUseCombatAction(state, 'shoot')) return stepCombat(state, 'shoot', rng);
+  if (distance >= 2 && canUseCombatAction(state, 'throwStone') && (state.base.ammo <= 1 || rng() < 0.22)) {
+    return stepCombat(state, 'throwStone', rng);
+  }
   if (state.player.hp <= 20 && distance === 0 && canUseCombatAction(state, 'stepBack')) return stepCombat(state, 'stepBack', rng);
   if (state.player.hp <= 20 && canUseCombatAction(state, 'guard') && rng() < 0.25) return stepCombat(state, 'guard', rng);
   if (state.player.stamina >= 8 && distance <= 1 && rng() < 0.42 && canUseCombatAction(state, 'heavy')) {
@@ -160,24 +175,34 @@ function chooseGrowthChoice(state, rng) {
 function shouldExplore(state) {
   return state.player.hp >= 18
     && state.base.food > 0
-    && state.base.day < 10
+    && state.base.day <= CONFIG.maxDay
     && hasExplorableTime(state)
-    && (state.base.food < 7 || state.base.materials < 8 || state.base.medicine < 2 || state.player.hp > 28);
+    && (state.base.food < 7 || state.base.materials < 8 || state.base.medicine < 2 || state.base.fuel < 2 || state.player.hp > 28 || state.base.routeProgress < CONFIG.escapeDistance - 30);
+}
+
+function shouldAdvance(state, sortiesToday) {
+  return state.base.routeProgress < CONFIG.escapeDistance
+    && state.base.timeLeft >= CONFIG.travelTimeCost
+    && state.base.fuel >= CONFIG.travelFuelCost
+    && state.base.food >= CONFIG.travelFoodCost + 2
+    && state.player.hp >= 20
+    && (sortiesToday > 0 || state.base.food >= 8 || state.base.fuel >= 4 || state.base.day >= 6 || state.base.routeProgress >= CONFIG.escapeDistance - 40);
 }
 
 function chooseAffordableSite(state, rng) {
   const preferred = chooseSite(state, rng);
   if (getSiteProfile(state, preferred).timeCost <= state.base.timeLeft) return preferred;
-  return SITES.filter((site) => getSiteProfile(state, site.id).timeCost <= state.base.timeLeft)[0]?.id ?? preferred;
+  return getAvailableSites(state).filter((site) => getSiteProfile(state, site.id).timeCost <= state.base.timeLeft)[0]?.id ?? preferred;
 }
 
 function chooseSite(state, rng) {
-  const scored = SITES.map((site) => {
+  const scored = getAvailableSites(state).map((site) => {
     const profile = getSiteProfile(state, site.id);
     const rewardNeed = profile.reward.food * (state.base.food < 6 ? 1.5 : 0.55)
       + profile.reward.materials * (state.base.materials < 9 ? 1.2 : 0.45)
       + profile.reward.medicine * (state.base.medicine < 3 || state.player.hp < 25 ? 1.6 : 0.5)
-      + profile.reward.ammo * (state.base.ammo < 4 ? 1.1 : 0.35);
+      + profile.reward.ammo * (state.base.ammo < 4 ? 1.1 : 0.35)
+      + profile.reward.fuel * (state.base.fuel < 3 ? 2 : 0.4);
     const risk = profile.danger * 1.2 + Math.max(0, profile.timeCost - state.base.timeLeft) * 10;
     return { id: site.id, score: rewardNeed * profile.rewardMultiplier + profile.rareChance * 5 - risk + rng() * 1.5 };
   });
@@ -185,13 +210,14 @@ function chooseSite(state, rng) {
 }
 
 function hasExplorableTime(state) {
-  return SITES.some((site) => getSiteProfile(state, site.id).timeCost <= state.base.timeLeft);
+  return getAvailableSites(state).some((site) => getSiteProfile(state, site.id).timeCost <= state.base.timeLeft);
 }
 
 function assertValidState(state, seed, steps) {
   const numbers = [
     state.base.day,
     state.base.timeLeft,
+    state.base.routeProgress,
     state.base.food,
     state.base.materials,
     state.base.medicine,
@@ -204,16 +230,22 @@ function assertValidState(state, seed, steps) {
     state.haul.medicine,
     state.haul.ammo,
     state.base.ammo,
+    state.base.fuel,
     state.weapon.condition,
     state.growth.level,
     state.growth.xp,
-    state.growth.nextXp
+    state.growth.nextXp,
+    state.expeditionDepth,
+    state.threat
   ];
   for (const value of numbers) {
     assert.equal(Number.isFinite(value), true, `non-finite value at seed ${seed}, step ${steps}`);
   }
   assert.ok(state.base.day >= 1, `invalid day at seed ${seed}, step ${steps}`);
+  assert.ok(state.base.routeProgress >= 0 && state.base.routeProgress <= CONFIG.escapeDistance, `invalid route progress at seed ${seed}, step ${steps}`);
   assert.ok(state.base.defense >= 1, `invalid defense at seed ${seed}, step ${steps}`);
+  assert.ok(state.expeditionDepth >= 0, `invalid expedition depth at seed ${seed}, step ${steps}`);
+  assert.ok(state.threat >= 0, `invalid threat at seed ${seed}, step ${steps}`);
   assert.ok(state.player.stamina >= 0, `negative stamina at seed ${seed}, step ${steps}`);
   assert.ok(state.weapon.condition >= 0, `negative weapon condition at seed ${seed}, step ${steps}`);
 }
@@ -225,7 +257,7 @@ function chooseBackgroundForSeed(seed) {
 }
 
 function resourceTotal(resources) {
-  return resources.food + resources.materials + resources.medicine + resources.ammo;
+  return resources.food + resources.materials + resources.medicine + resources.ammo + resources.fuel;
 }
 
 function makeRng(seed) {

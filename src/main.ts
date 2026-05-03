@@ -9,6 +9,8 @@ import {
   CONFIG,
   GROWTH_CHOICES,
   SITES,
+  advanceRoute,
+  canFieldPatch,
   canUseCombatAction,
   chooseBackground,
   chooseGrowth,
@@ -16,8 +18,11 @@ import {
   cookMeal,
   defenseCost,
   endDay,
+  fieldPatchUp,
+  getAvailableSites,
   getBackground,
   getCombatPreview,
+  getRetreatPreview,
   getSite,
   getSiteProfile,
   infirmaryCost,
@@ -41,7 +46,6 @@ const root = document.getElementById('app');
 if (!root) throw new Error('app not found');
 const app = root;
 
-const siteKeys: Record<SiteId, string> = { store: '1', clinic: '2', road: '3' };
 const backgroundKeys: Record<BackgroundId, string> = { guard: '1', mechanic: '2', medic: '3' };
 const growthKeys: Record<GrowthChoiceId, string> = { melee: '1', firearms: '2', fieldcraft: '3' };
 
@@ -53,7 +57,7 @@ function draw() {
         <h1>レトロ終末戦闘研究所</h1>
       </div>
       <div class="result ${state.result}">
-        ${state.result === 'ongoing' ? `${state.base.day}日目/${CONFIG.maxDay}` : resultText()}
+        ${state.result === 'ongoing' ? `${state.base.routeProgress}/${CONFIG.escapeDistance}km` : resultText()}
       </div>
     </header>
 
@@ -65,7 +69,6 @@ function draw() {
       </section>
       <aside class="right-stack">
         ${renderPlayerPanel()}
-        ${renderResourceUsePanel()}
         ${renderHaulPanel()}
         ${renderLogs()}
       </aside>
@@ -81,17 +84,19 @@ function renderBasePanel(): string {
   return `
     <section class="panel">
       <div class="panel-head">
-        <h2>拠点</h2>
-        <span class="badge">${state.condition.name} / 夜の食料: ${CONFIG.nightFoodCost}</span>
+        <h2>避難車</h2>
+        <span class="badge">${state.condition.name} / ${base.day}日目 / 夜の食料: ${CONFIG.nightFoodCost}</span>
       </div>
       <div class="stat-grid">
+        ${stat('進行', `${base.routeProgress}km`, `北丘送信塔まで${CONFIG.escapeDistance - base.routeProgress}km。車を進めて勝利へ近づく。`)}
         ${stat('食料', base.food, '夜を越す。食事でHPと士気を戻す。')}
-        ${stat('資材', base.materials, '防衛、診療所、武器整備に使う。')}
-        ${stat('薬品', base.medicine, '治療、診療所改善に使う。')}
+        ${stat('燃料', base.fuel, '日没後の移動と手動走行に必要。切れると足止めが痛い。')}
+        ${stat('資材', base.materials, '車体補強、救護棚、武器整備、応急手当に使う。')}
+        ${stat('薬品', base.medicine, '治療と救護棚整理に使う。')}
         ${stat('弾薬', base.ammo, '銃撃に使う。距離を安全に保つための資源。')}
-        ${stat('防衛', base.defense, '夜の士気低下と探索遭遇率を少し抑える。')}
+        ${stat('車体', base.defense, '探索遭遇率を少し抑え、夜間走行距離も伸ばす。')}
         ${stat('士気', base.morale, '撤退や飢えで下がり、0で崩壊。')}
-        ${stat('診療所', base.infirmaryLevel, '治療と戦闘中の休息を強化。')}
+        ${stat('救護棚', base.infirmaryLevel, '治療と戦闘中の休息を強化。')}
         ${stat('時間', `${base.timeLeft}h`, '探索で消費する日中の残り時間。0に近いほど帰還判断が重要。')}
       </div>
       <p class="small-note">${state.condition.description}</p>
@@ -106,7 +111,7 @@ function renderScenePanel(): string {
       ? '帰還判断'
       : state.phase === 'setup'
         ? '誰が外へ出る？'
-        : '拠点の門';
+        : '北丘送信塔への道';
   return `
     <section class="panel scene-panel">
       <div class="panel-head">
@@ -200,6 +205,7 @@ function renderPhasePanel(): string {
   }
 
   if (state.phase === 'combat' && state.combat) {
+    const retreatPreview = getRetreatPreview(state);
     return `
       <section class="panel command-panel">
         <div class="panel-head">
@@ -219,10 +225,14 @@ function renderPhasePanel(): string {
           ${combatButton('attack')}
           ${combatButton('heavy')}
           ${combatButton('shoot')}
+          ${combatButton('throwStone')}
           ${combatButton('guard')}
           ${combatButton('stepBack')}
           ${combatButton('rest')}
-          <button class="danger" data-action="retreat">${buttonText('T', '撤退')}</button>
+          <button class="danger" data-action="retreat">
+            ${buttonText('T', '撤退')}
+            ${retreatPreview ? `<small>予想 HP-${retreatPreview.hpLoss} / 士気-${retreatPreview.moraleLoss}<br>荷物 ${retreatPreview.haulKeepPercent}%保持</small>` : ''}
+          </button>
         </div>
       </section>
     `;
@@ -231,13 +241,15 @@ function renderPhasePanel(): string {
   if (state.phase === 'aftermath') {
     const previousSite = state.lastSiteId ? getSite(state.lastSiteId) : SITES[0];
     const canRevisit = state.base.timeLeft >= previousSite.timeCost;
+    const patchDisabled = canFieldPatch(state) ? '' : 'disabled';
     return `
       <section class="panel command-panel">
         <h2>帰還判断</h2>
-        <p class="summary">荷物はまだ安全ではありません。残り時間を使ってさらに漁るか、拠点へ戻って資源を確定します。</p>
+        <p class="summary">荷物はまだ安全ではありません。さらに漁るほど探索深度が上がり、希少品も出やすくなりますが、脅威も濃くなります。</p>
         <div class="commands">
-          <button data-action="explore" data-site="${previousSite.id}" ${canRevisit ? '' : 'disabled'}>${buttonText('C', `${previousSite.name}を再探索 (${previousSite.timeCost}h)`)}</button>
-          <button data-action="return">${buttonText('Enter', '拠点へ戻る')}</button>
+          <button data-action="explore" data-site="${previousSite.id}" ${canRevisit ? '' : 'disabled'}>${buttonText('C', `さらに漁る: ${previousSite.name} (${previousSite.timeCost}h)`)}</button>
+          <button data-action="field-patch" ${patchDisabled}>${buttonText('H', `応急手当 (資材${CONFIG.fieldPatchMaterialCost} / ${CONFIG.fieldPatchTimeCost}h)`)}</button>
+          <button data-action="return">${buttonText('Enter', '車へ戻る')}</button>
         </div>
         ${renderSites(true)}
       </section>
@@ -248,15 +260,16 @@ function renderPhasePanel(): string {
     <section class="panel command-panel">
       <div class="panel-head">
         <h2>朝の判断</h2>
-        <span class="badge">${CONFIG.maxDay}日目まで生存</span>
+        <span class="badge">送信塔まで残り${CONFIG.escapeDistance - state.base.routeProgress}km</span>
       </div>
       ${renderSites(false)}
       <div class="base-actions">
-        <button data-action="reinforce">${buttonText('Q', `門を補強 (資材${defenseCost(state)})`)}</button>
+        <button data-action="reinforce">${buttonText('Q', `車体補強 (資材${defenseCost(state)})`)}</button>
         <button data-action="repair">${buttonText('V', `武器整備 (資材${weaponRepairCost(state)})`)}</button>
-        <button data-action="infirmary">${buttonText('W', `診療所改善 (資材${infirmaryCost(state)} + 薬品1)`)}</button>
+        <button data-action="infirmary">${buttonText('W', `救護棚整理 (資材${infirmaryCost(state)} + 薬品1)`)}</button>
         <button data-action="treat">${buttonText('E', '治療 (薬品1)')}</button>
         <button data-action="meal">${buttonText('F', '食事 (食料1)')}</button>
+        <button data-action="advance">${buttonText('M', `車を進める (燃料${CONFIG.travelFuelCost} / 食料${CONFIG.travelFoodCost} / ${CONFIG.travelTimeCost}h)`)}</button>
         <button data-action="end-day">${buttonText('D', '日を終える')}</button>
         <button data-action="restart">${buttonText('X', '最初から')}</button>
       </div>
@@ -265,37 +278,35 @@ function renderPhasePanel(): string {
 }
 
 function renderSites(compact: boolean): string {
+  const sites = getAvailableSites(state);
   return `
     <div class="site-grid ${compact ? 'compact' : ''}">
-      ${SITES.map((site) => `
-        ${renderSiteCard(site.id, compact)}
+      ${sites.map((site, index) => `
+        ${renderSiteCard(site.id, compact, index)}
       `).join('')}
     </div>
   `;
 }
 
-function renderSiteCard(siteId: SiteId, compact: boolean): string {
+function renderSiteCard(siteId: SiteId, compact: boolean, index: number): string {
   const site = getSite(siteId);
   const profile = getSiteProfile(state, siteId);
-  const conditionBadge = profile.conditionName ? `<span class="badge mini">${profile.conditionName}</span>` : '';
-  const tagBadges = profile.tags.map((tag) => `<span class="badge mini" title="${tag.description}">${tag.name}</span>`).join('');
+  const tags = [profile.conditionName, ...profile.tags.map((tag) => tag.name)].filter(Boolean).slice(0, 2).join(' / ');
+  const key = String(index + 1);
   return `
         <article class="site-card">
           <div class="site-title">
             <strong>${site.name}</strong>
             <span class="danger-pips">${'!'.repeat(profile.danger)}</span>
           </div>
-          <p>${site.description}</p>
-          <div class="hint">${site.rewardHint} ${conditionBadge}${tagBadges}</div>
+          ${compact ? '' : `<p>${site.description}</p>`}
+          <div class="hint">${site.rewardHint}${tags ? ` / ${tags}` : ''}</div>
           <div class="site-meta">
-            <span>見返り x${profile.rewardMultiplier.toFixed(2)}</span>
-            <span>希少 ${Math.round(profile.rareChance * 100)}%</span>
-            <span>敵数 ${encounterCountHint(profile.danger)}</span>
             <span>時間 ${profile.timeCost}h</span>
             <span>接敵距離 ${profile.distanceRange[0]}-${profile.distanceRange[1]}</span>
-            <span>${site.rareHint}</span>
+            <span>見返り x${profile.rewardMultiplier.toFixed(2)} / 希少 ${Math.round(profile.rareChance * 100)}%</span>
           </div>
-          <button data-action="explore" data-site="${site.id}" ${state.base.timeLeft >= profile.timeCost ? '' : 'disabled'}>${buttonText(siteKeys[site.id], compact ? `行く (${profile.timeCost}h)` : `探索 (${profile.timeCost}h)`)}</button>
+          <button data-action="explore" data-site="${site.id}" ${state.base.timeLeft >= profile.timeCost ? '' : 'disabled'}>${buttonText(key, compact ? `行く (${profile.timeCost}h)` : `探索 (${profile.timeCost}h)`)}</button>
         </article>
   `;
 }
@@ -323,20 +334,6 @@ function renderPlayerPanel(): string {
   `;
 }
 
-function renderResourceUsePanel(): string {
-  return `
-    <section class="panel">
-      <h2>資源の価値</h2>
-      <div class="resource-help">
-        <div><strong>食料</strong><span>夜を越す。食事でHPと士気を戻す。</span></div>
-        <div><strong>資材</strong><span>門、防衛、武器整備。近接戦闘力にも直結。</span></div>
-        <div><strong>薬品</strong><span>負傷を戻す。診療所で回復効率が伸びる。</span></div>
-        <div><strong>弾薬</strong><span>銃撃で消費。距離を保つほど価値が高い。</span></div>
-      </div>
-    </section>
-  `;
-}
-
 function renderHaulPanel(): string {
   return `
     <section class="panel">
@@ -345,7 +342,7 @@ function renderHaulPanel(): string {
         <span class="badge">${state.phase === 'aftermath' ? '未帰還' : '安全'}</span>
       </div>
       <div class="haul-row">${resourcePills(state.haul)}</div>
-      <p class="small-note">帰還するまで拠点資源にはなりません。</p>
+      <p class="small-note">帰還するまで車内の安全な物資にはなりません。</p>
     </section>
   `;
 }
@@ -381,6 +378,8 @@ function performAction(action: string | undefined, siteId?: SiteId, backgroundId
   if (action === 'growth' && growthId) state = chooseGrowth(state, growthId);
   if (action === 'explore' && siteId) state = startExploration(state, siteId, Math.random);
   if (action === 'return') state = returnToBase(state);
+  if (action === 'field-patch') state = fieldPatchUp(state);
+  if (action === 'advance') state = advanceRoute(state, Math.random);
   if (action === 'end-day') state = endDay(state, Math.random);
   if (action === 'reinforce') state = reinforceDefense(state);
   if (action === 'repair') state = repairWeapon(state);
@@ -404,7 +403,7 @@ function handleKeydown(event: KeyboardEvent) {
     return;
   }
 
-  const siteByKey = SITES.find((site) => siteKeys[site.id] === key);
+  const siteByKey = getAvailableSites(state)[Number(key) - 1];
   if (siteByKey && (state.phase === 'base' || state.phase === 'aftermath')) {
     event.preventDefault();
     performAction('explore', siteByKey.id);
@@ -418,6 +417,7 @@ function handleKeydown(event: KeyboardEvent) {
       w: 'infirmary',
       e: 'treat',
       f: 'meal',
+      m: 'advance',
       d: 'end-day',
       x: 'restart'
     };
@@ -433,6 +433,7 @@ function handleKeydown(event: KeyboardEvent) {
       a: 'combat:attack',
       s: 'combat:heavy',
       f: 'combat:shoot',
+      l: 'combat:throwStone',
       g: 'combat:guard',
       b: 'combat:stepBack',
       r: 'combat:rest',
@@ -477,6 +478,11 @@ function handleKeydown(event: KeyboardEvent) {
     if (key === 'c' && state.lastSiteId) {
       event.preventDefault();
       performAction('explore', state.lastSiteId);
+      return;
+    }
+    if (key === 'h') {
+      event.preventDefault();
+      performAction('field-patch');
     }
     return;
   }
@@ -524,20 +530,36 @@ function drawGround(ctx: CanvasRenderingContext2D) {
 }
 
 function drawBase(ctx: CanvasRenderingContext2D, game: GameState) {
+  const progressRatio = game.base.routeProgress / CONFIG.escapeDistance;
+  const vx = 132 + Math.round(540 * progressRatio);
   ctx.fillStyle = '#7bdff2';
-  ctx.fillRect(132, 136, 170 + game.base.defense * 12, 66);
+  ctx.fillRect(vx, 146, 180 + game.base.defense * 12, 52);
+  ctx.fillRect(vx + 30, 122, 92, 32);
   ctx.fillStyle = '#172033';
-  ctx.fillRect(146, 150, 52, 52);
-  ctx.fillRect(226, 160, 42, 42);
+  ctx.fillRect(vx + 18, 154, 48, 30);
+  ctx.fillRect(vx + 84, 132, 34, 22);
+  ctx.fillRect(vx + 128, 156, 44, 28);
+  ctx.fillStyle = '#080b12';
+  ctx.fillRect(vx + 28, 194, 28, 18);
+  ctx.fillRect(vx + 142, 194, 28, 18);
+  ctx.fillStyle = '#d7f3ff';
+  ctx.fillRect(vx + 74, 142, 18, 8);
   ctx.fillStyle = '#f4d35e';
-  ctx.fillRect(174, 116, 10, 20);
-  ctx.fillRect(176, 110, 6, 6);
+  ctx.fillRect(vx + 12, 138, 12, 8);
+  ctx.fillRect(vx + 176 + game.base.defense * 12, 158, 8, 10);
+  ctx.fillStyle = '#ff6b6b';
+  ctx.fillRect(760, 122, 30, 82);
+  ctx.fillRect(746, 122, 58, 8);
+  ctx.fillStyle = '#40506d';
+  ctx.fillRect(132, 218, 660, 4);
+  ctx.fillStyle = '#f4d35e';
+  ctx.fillRect(132, 216, Math.round(660 * progressRatio), 8);
   ctx.fillStyle = '#ff6b6b';
   ctx.fillRect(620, 160, 34, 44);
   ctx.fillStyle = '#f4d35e';
-  ctx.fillText(`${game.base.day}日目: ${phaseText()}`, 92, 72);
+  ctx.fillText(`${game.base.day}日目: 送信塔まで ${CONFIG.escapeDistance - game.base.routeProgress}km`, 92, 72);
   ctx.fillText(`荷物: ${resourceText(game.haul)}`, 92, 96);
-  ctx.fillText(`武器状態: ${game.weapon.condition}/${game.weapon.maxCondition}`, 92, 120);
+  ctx.fillText(`現場: 深度${game.expeditionDepth} / 脅威${game.threat}  武器: ${game.weapon.condition}/${game.weapon.maxCondition}`, 92, 120);
 }
 
 function drawCombat(ctx: CanvasRenderingContext2D, game: GameState) {
@@ -548,15 +570,26 @@ function drawCombat(ctx: CanvasRenderingContext2D, game: GameState) {
   ctx.fillStyle = '#64dfdf';
   ctx.fillRect(px, y - 38, 32, 38);
   ctx.fillRect(px + 8, y - 58, 16, 18);
+  ctx.strokeStyle = '#40506d';
+  ctx.beginPath();
+  ctx.moveTo(330, 222);
+  ctx.lineTo(760, 222);
+  ctx.stroke();
+  ctx.fillStyle = '#8391ac';
+  for (let distance = CONFIG.minDistance; distance <= CONFIG.maxDistance; distance += 1) {
+    const tx = 330 + distance * 86;
+    ctx.fillRect(tx, 216, 2, 12);
+    ctx.fillText(String(distance), tx - 3, 238);
+  }
   game.combat.enemies.forEach((enemy, index) => {
-    const ex = 760 - game.combat!.distance * 118 + index * 42;
+    const ex = 330 + game.combat!.distance * 86 + index * 38;
     ctx.fillStyle = index === 0 ? '#ff6b6b' : '#d95d65';
     ctx.fillRect(ex, y - 46, 34, 46);
     ctx.fillRect(ex + 9, y - 68, 16, 22);
     ctx.fillStyle = '#f4d35e';
     ctx.fillText(`${Math.max(0, enemy.hp)}`, ex + 3, y - 76);
   });
-  const leadEnemyX = 760 - game.combat.distance * 118;
+  const leadEnemyX = 330 + game.combat.distance * 86;
   ctx.strokeStyle = '#f4d35e';
   ctx.beginPath();
   ctx.moveTo(px + 16, 218);
@@ -591,6 +624,7 @@ function combatKey(action: CombatAction): string {
   if (action === 'attack') return 'A';
   if (action === 'heavy') return 'S';
   if (action === 'shoot') return 'F';
+  if (action === 'throwStone') return 'L';
   if (action === 'guard') return 'G';
   if (action === 'stepBack') return 'B';
   return 'R';
@@ -602,22 +636,17 @@ function resourcePills(resources: Resources): string {
     <span>資材 ${resources.materials}</span>
     <span>薬品 ${resources.medicine}</span>
     <span>弾薬 ${resources.ammo}</span>
+    <span>燃料 ${resources.fuel}</span>
   `;
 }
 
 function phaseText(): string {
   if (state.phase === 'setup') return '経歴選択';
-  if (state.phase === 'base') return '拠点';
+  if (state.phase === 'base') return '車内';
   if (state.phase === 'combat') return '接敵';
   if (state.phase === 'aftermath') return '帰還判断';
   if (state.phase === 'growth') return '成長';
   return state.result === 'victory' ? '生存' : '喪失';
-}
-
-function encounterCountHint(danger: number): string {
-  if (danger === 1) return '1-2';
-  if (danger === 2) return '1-3';
-  return '2-3';
 }
 
 function resultText(): string {

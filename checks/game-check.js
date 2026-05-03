@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
 import {
+  CONFIG,
+  advanceRoute,
   chooseBackground,
   chooseGrowth,
-  endDay,
+  canFieldPatch,
+  fieldPatchUp,
+  getAvailableSites,
   getCombatPreview,
+  getRetreatPreview,
   getSiteProfile,
   initialState,
   repairWeapon,
@@ -18,6 +23,7 @@ import {
 {
   let state = initialState();
   state = chooseBackground(state, 'mechanic');
+  assert.equal(getAvailableSites(state).length, CONFIG.visibleSiteChoices);
   const timeBeforeExplore = state.base.timeLeft;
   const roadProfile = getSiteProfile(state, 'road');
   state = startExploration(state, 'road', sequence([0.99, 0, 0]));
@@ -51,6 +57,18 @@ import {
 
 {
   let state = initialState();
+  state = chooseBackground(state, 'mechanic', sequence([0.1, 0.1, 0.1, 0.1, 0.1, 0.1]));
+  assert.equal(getAvailableSites(state).length, 3);
+  state.base.routeProgress = Math.floor(CONFIG.escapeDistance * 0.75);
+  state.base.day = 8;
+  state = advanceRoute(state, sequence([0.98, 0.98, 0.98, 0.98]));
+  const lateSites = getAvailableSites(state).map((site) => site.id);
+  assert.equal(lateSites.length, 3);
+  assert.ok(lateSites.includes('checkpoint') || lateSites.includes('clinic') || lateSites.includes('gas'));
+}
+
+{
+  let state = initialState();
   state = chooseBackground(state, 'medic');
   state = startExploration(state, 'clinic', () => 0);
   assert.equal(state.phase, 'event');
@@ -72,6 +90,20 @@ import {
 
 {
   let state = initialState();
+  state = chooseBackground(state, 'mechanic');
+  const baseProfile = getSiteProfile(state, 'road');
+  state = startExploration(state, 'road', sequence([0.99, 0.99, 0]));
+  assert.equal(state.phase, 'aftermath');
+  state = startExploration(state, 'road', sequence([0.99, 0.99, 0]));
+  assert.ok(state.expeditionDepth > 0);
+  assert.ok(state.threat > 0);
+  const deepProfile = getSiteProfile(state, 'road');
+  assert.ok(deepProfile.rewardMultiplier > baseProfile.rewardMultiplier);
+  assert.ok(deepProfile.rareChance > baseProfile.rareChance);
+}
+
+{
+  let state = initialState();
   state = chooseBackground(state, 'guard');
   state = startExploration(state, 'road', sequence([0.99, 0, 0]));
   const preview = getCombatPreview(state, 'shoot');
@@ -80,6 +112,38 @@ import {
   const enemyHpBefore = state.combat.enemies[0].hp;
   state = stepCombat(state, 'shoot', () => 0);
   assert.ok(state.combat.enemies[0].hp < enemyHpBefore);
+}
+
+{
+  let state = initialState();
+  state = chooseBackground(state, 'medic');
+  state = startExploration(state, 'road', sequence([0.99, 0, 0]));
+  const preview = getCombatPreview(state, 'throwStone');
+  assert.ok(preview);
+  assert.ok(preview.hitPercent > 20);
+  const enemyHpBefore = state.combat.enemies[0].hp;
+  state = stepCombat(state, 'throwStone', () => 0);
+  assert.ok(state.combat.enemies[0].hp < enemyHpBefore);
+}
+
+{
+  let state = initialState();
+  state = chooseBackground(state, 'guard');
+  state = startExploration(state, 'road', sequence([0.99, 0, 0]));
+  const retreatPreview = getRetreatPreview(state);
+  assert.ok(retreatPreview);
+  assert.ok(retreatPreview.hpLoss >= 3);
+  assert.ok(retreatPreview.moraleLoss >= 6);
+  state.combat.enemies = [state.combat.enemies[0]];
+  state.combat.enemies[0].hp = 1;
+  state.player.hp = 18;
+  state = stepCombat(state, 'attack', () => 0);
+  assert.equal(state.phase, 'aftermath');
+  const materialsBefore = state.base.materials;
+  assert.ok(canFieldPatch(state));
+  state = fieldPatchUp(state);
+  assert.ok(state.player.hp > 18);
+  assert.ok(state.base.materials < materialsBefore);
 }
 
 {
@@ -121,10 +185,9 @@ import {
 {
   let state = initialState();
   state = chooseBackground(state, 'guard');
-  state.base.day = 9;
+  state.base.routeProgress = CONFIG.escapeDistance - 1;
   state.base.food = 4;
-  state.base.timeLeft = 0;
-  state = endDay(state, () => 0);
+  state = advanceRoute(state, () => 0);
   assert.equal(state.result, 'victory');
 }
 

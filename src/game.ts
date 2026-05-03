@@ -1,586 +1,76 @@
-export type CombatAction = 'attack' | 'heavy' | 'shoot' | 'guard' | 'stepBack' | 'rest';
-export type SiteId = 'store' | 'clinic' | 'road';
-export type BackgroundId = 'guard' | 'mechanic' | 'medic';
-export type Phase = 'setup' | 'base' | 'event' | 'combat' | 'aftermath' | 'growth' | 'ended';
-export type GameResult = 'ongoing' | 'victory' | 'defeat';
-export type EventChoiceId = 'safe' | 'tools' | 'bold' | 'special';
-export type GrowthChoiceId = 'melee' | 'firearms' | 'fieldcraft';
-export type DailyConditionId = 'clear' | 'fog' | 'rain' | 'raiders' | 'quiet';
-export type SiteTagId = 'locked' | 'burned' | 'freshTracks' | 'shortcut' | 'openGround' | 'tightAlleys';
-export type BoxId = 'foodCrate' | 'medCase' | 'ammoCan' | 'toolLocker' | 'survivorStash';
-export type EnemyModifierId = 'none' | 'wounded' | 'armed' | 'frenzied' | 'lurker';
+import type {
+  Background,
+  BackgroundId,
+  BoxId,
+  BoxType,
+  CombatAction,
+  CombatPreview,
+  CombatState,
+  DailyCondition,
+  EnemyModifier,
+  EnemyModifierId,
+  EnemyState,
+  EnemyTemplate,
+  EventChoiceId,
+  EventState,
+  ExplorationSite,
+  GameResult,
+  GameState,
+  GrowthChoice,
+  GrowthChoiceId,
+  Resources,
+  RetreatPreview,
+  SiteId,
+  SiteProfile,
+  SiteTag
+} from './gameTypes.js';
+import {
+  BACKGROUNDS,
+  BOX_TYPES,
+  CONFIG,
+  DAILY_CONDITIONS,
+  ENEMY_MODIFIERS,
+  GROWTH_CHOICES,
+  SITES,
+  SITE_TAGS
+} from './gameData.js';
 
-export interface Resources {
-  food: number;
-  materials: number;
-  medicine: number;
-  ammo: number;
-}
-
-export interface BaseState extends Resources {
-  day: number;
-  timeLeft: number;
-  defense: number;
-  morale: number;
-  infirmaryLevel: number;
-}
-
-export interface Fighter {
-  name: string;
-  hp: number;
-  maxHp: number;
-  stamina: number;
-  maxStamina: number;
-  attack: number;
-  intellect: number;
-  guardActive: boolean;
-  bleedTurns: number;
-  focusTurns: number;
-}
-
-export interface Background {
-  id: BackgroundId;
-  name: string;
-  description: string;
-  perk: string;
-}
-
-export interface WeaponState {
-  name: string;
-  condition: number;
-  maxCondition: number;
-}
-
-export interface EnemyTemplate {
-  id: string;
-  name: string;
-  hp: number;
-  attack: number;
-  behavior: 'stalker' | 'brute' | 'skittish';
-}
-
-export interface ExplorationSite {
-  id: SiteId;
-  name: string;
-  description: string;
-  danger: number;
-  timeCost: number;
-  distanceRange: [number, number];
-  rewardHint: string;
-  rewardMultiplier: number;
-  rareChance: number;
-  rareHint: string;
-  reward: Resources;
-  enemies: EnemyTemplate[];
-}
-
-export interface SiteProfile extends ExplorationSite {
-  encounterShift: number;
-  conditionName: string;
-  tags: SiteTag[];
-}
-
-export interface SiteTag {
-  id: SiteTagId;
-  name: string;
-  description: string;
-  allowedSites?: SiteId[];
-  rewardScale: Partial<Resources>;
-  dangerShift: number;
-  rareBonus: number;
-  encounterShift: number;
-  timeShift: number;
-  distanceShift: number;
-}
-
-export interface BoxType {
-  id: BoxId;
-  name: string;
-  description: string;
-  allowedSites?: SiteId[];
-  rewardScale: Partial<Resources>;
-  safeScale: number;
-  toolsScale: number;
-  boldScale: number;
-  toolsCost: number;
-  boldWeaponDamage: number;
-  rareOnBold: boolean;
-  specialLabel: string;
-  specialDetail: string;
-}
-
-export interface EnemyModifier {
-  id: EnemyModifierId;
-  name: string;
-  description: string;
-  hpScale: number;
-  attackShift: number;
-  behavior?: EnemyTemplate['behavior'];
-  ammoDrop: number;
-  distanceShift: number;
-}
-
-export interface DailyCondition {
-  id: DailyConditionId;
-  name: string;
-  description: string;
-  siteId?: SiteId;
-  rewardScale: Partial<Resources>;
-  dangerShift: number;
-  rareBonus: number;
-  encounterShift: number;
-  timeShift: number;
-}
-
-export interface EventChoice {
-  id: EventChoiceId;
-  label: string;
-  detail: string;
-}
-
-export interface EventState {
-  siteId: SiteId;
-  boxId: BoxId;
-  title: string;
-  description: string;
-  choices: EventChoice[];
-}
-
-export interface CombatPreview {
-  hitPercent: number;
-  damageMin: number;
-  damageMax: number;
-  note: string;
-}
-
-export interface GrowthChoice {
-  id: GrowthChoiceId;
-  name: string;
-  description: string;
-  effect: string;
-}
-
-export interface GrowthState {
-  level: number;
-  xp: number;
-  nextXp: number;
-  pending: boolean;
-  perks: Record<GrowthChoiceId, number>;
-}
-
-export interface CombatState {
-  siteId: SiteId;
-  enemies: EnemyState[];
-  distance: number;
-  turn: number;
-}
-
-export interface EnemyState extends Fighter {
-  behavior: EnemyTemplate['behavior'];
-  modifierId: EnemyModifierId;
-  modifierName: string;
-  ammoDrop: number;
-}
-
-export interface GameState {
-  phase: Phase;
-  result: GameResult;
-  resultReason: string;
-  backgroundId: BackgroundId | null;
-  base: BaseState;
-  player: Fighter;
-  weapon: WeaponState;
-  growth: GrowthState;
-  condition: DailyCondition;
-  siteTags: Record<SiteId, SiteTag[]>;
-  combat: CombatState | null;
-  event: EventState | null;
-  haul: Resources;
-  lastSiteId: SiteId | null;
-  journal: string[];
-  combatLog: string[];
-}
-
-export const CONFIG = {
-  maxDay: 10,
-  maxDistance: 3,
-  minDistance: 0,
-  journalLimit: 12,
-  combatLogLimit: 10,
-  dayTime: 6,
-  nightFoodCost: 2,
-  nightMoralePressure: 4,
-  staminaRegenPerTurn: 2,
-  retreatHpLoss: 6,
-  weaponRepairAmount: 8,
-  combatCosts: {
-    attack: 3,
-    heavy: 6,
-    shoot: 4,
-    guard: 2,
-    stepBack: 2,
-    rest: 0
-  } satisfies Record<CombatAction, number>
-};
-
-export const BACKGROUNDS: Background[] = [
-  {
-    id: 'guard',
-    name: '元警備員',
-    description: '殴り合いと恐怖に少し慣れている。',
-    perk: '最大HP+6、攻撃+1、初期士気+3'
-  },
-  {
-    id: 'mechanic',
-    name: '整備士',
-    description: '壊れた道具をまだ使える形に戻せる。',
-    perk: '初期資材+3、弾薬+2、防衛+1、資材系コスト-1、射撃+'
-  },
-  {
-    id: 'medic',
-    name: '野外救護員',
-    description: '手当ての優先順位を間違えない。',
-    perk: '初期薬品+2、診療所+1、知性+1、治療量+4'
-  }
-];
-
-export const SITES: ExplorationSite[] = [
-  {
-    id: 'store',
-    name: '廃店舗',
-    description: '倒れた棚、缶詰、見通しの悪いバックヤード。',
-    danger: 2,
-    timeCost: 2,
-    distanceRange: [0, 1],
-    rewardHint: '食料++ / 資材+ / 弾薬少',
-    rewardMultiplier: 1.18,
-    rareChance: 0.2,
-    rareHint: '封の残った保存箱',
-    reward: { food: 5, materials: 2, medicine: 0, ammo: 1 },
-    enemies: [
-      { id: 'feral', name: '飢えた略奪者', hp: 24, attack: 5, behavior: 'stalker' },
-      { id: 'hound', name: 'ガラス牙の犬', hp: 18, attack: 6, behavior: 'skittish' }
-    ]
-  },
-  {
-    id: 'clinic',
-    name: '廃診療所',
-    description: '薬品ロッカーと、音を吸い込む静かな処置室。',
-    danger: 3,
-    timeCost: 3,
-    distanceRange: [1, 2],
-    rewardHint: '薬品++ / 食料+',
-    rewardMultiplier: 1.45,
-    rareChance: 0.38,
-    rareHint: '抗生剤・上等な薬品',
-    reward: { food: 1, materials: 1, medicine: 3, ammo: 0 },
-    enemies: [
-      { id: 'patient', name: 'うわ言の患者', hp: 28, attack: 6, behavior: 'stalker' },
-      { id: 'orderly', name: '錆びた介護士', hp: 34, attack: 7, behavior: 'brute' }
-    ]
-  },
-  {
-    id: 'road',
-    name: '草に沈む道路',
-    description: '放置車両とスクラップ。開けているが隠れ場は少ない。',
-    danger: 1,
-    timeCost: 2,
-    distanceRange: [2, 3],
-    rewardHint: '資材++ / 弾薬+ / 低危険',
-    rewardMultiplier: 1,
-    rareChance: 0.1,
-    rareHint: '工具箱',
-    reward: { food: 1, materials: 5, medicine: 0, ammo: 2 },
-    enemies: [
-      { id: 'drifter', name: '腹を空かせた放浪者', hp: 20, attack: 4, behavior: 'skittish' },
-      { id: 'crawler', name: '側溝の這うもの', hp: 26, attack: 5, behavior: 'stalker' }
-    ]
-  }
-];
-
-export const combatLabels: Record<CombatAction, string> = {
-  attack: '攻撃',
-  heavy: '強攻撃',
-  shoot: '銃撃',
-  guard: 'ガード',
-  stepBack: '後退',
-  rest: '息を整える'
-};
-
-export const GROWTH_CHOICES: GrowthChoice[] = [
-  {
-    id: 'melee',
-    name: '近接訓練',
-    description: 'バールの間合い、踏み込み、倒し切りを磨く。',
-    effect: '攻撃+1、最大HP+2。近接命中と近接ダメージが少し伸びる。'
-  },
-  {
-    id: 'firearms',
-    name: '銃器運用',
-    description: '少ない弾を当てるための構えと射線を覚える。',
-    effect: '知性+1、弾薬+1。銃撃命中と銃撃ダメージが少し伸びる。'
-  },
-  {
-    id: 'fieldcraft',
-    name: '野外技術',
-    description: '危険の匂い、退路、荷物のまとめ方がうまくなる。',
-    effect: '最大STA+1、士気+3。探索遭遇率が少し下がる。'
-  }
-];
-
-export const DAILY_CONDITIONS: DailyCondition[] = [
-  {
-    id: 'clear',
-    name: '澄んだ朝',
-    description: '遠くまで見える。危険も報酬も読みやすい。',
-    rewardScale: {},
-    dangerShift: 0,
-    rareBonus: 0,
-    encounterShift: -0.03,
-    timeShift: 0
-  },
-  {
-    id: 'fog',
-    name: '濃霧',
-    description: '見通しは悪いが、普段見逃す物資に気づける。',
-    rewardScale: {},
-    dangerShift: 1,
-    rareBonus: 0.12,
-    encounterShift: 0.08,
-    timeShift: 0
-  },
-  {
-    id: 'rain',
-    name: '冷たい雨',
-    description: '足場が悪く時間を食う。道路のスクラップは拾いやすい。',
-    siteId: 'road',
-    rewardScale: { materials: 1.35, ammo: 1.15 },
-    dangerShift: 0,
-    rareBonus: 0.03,
-    encounterShift: -0.02,
-    timeShift: 1
-  },
-  {
-    id: 'raiders',
-    name: '略奪者の噂',
-    description: '廃店舗に人影が集まる。食料は多いが衝突しやすい。',
-    siteId: 'store',
-    rewardScale: { food: 1.45, ammo: 1.15 },
-    dangerShift: 1,
-    rareBonus: 0.05,
-    encounterShift: 0.12,
-    timeShift: 0
-  },
-  {
-    id: 'quiet',
-    name: '不自然な静けさ',
-    description: '廃診療所が静まり返る。薬品の匂いだけが残っている。',
-    siteId: 'clinic',
-    rewardScale: { medicine: 1.45 },
-    dangerShift: -1,
-    rareBonus: 0.08,
-    encounterShift: -0.08,
-    timeShift: 0
-  }
-];
-
-export const SITE_TAGS: SiteTag[] = [
-  {
-    id: 'locked',
-    name: '施錠区画',
-    description: '開けるには手間がかかるが、まとまった物資が残っている。',
-    rewardScale: { materials: 1.2, medicine: 1.15, ammo: 1.15 },
-    dangerShift: 0,
-    rareBonus: 0.08,
-    encounterShift: -0.02,
-    timeShift: 1,
-    distanceShift: 0
-  },
-  {
-    id: 'burned',
-    name: '火災跡',
-    description: '食料は焼けたが、金属片と薬品棚の残骸が拾える。',
-    rewardScale: { food: 0.65, materials: 1.35, medicine: 1.15 },
-    dangerShift: 0,
-    rareBonus: 0.02,
-    encounterShift: -0.04,
-    timeShift: 0,
-    distanceShift: 0
-  },
-  {
-    id: 'freshTracks',
-    name: '足跡多数',
-    description: '最近の足跡が多い。危険だが、誰かの荷物も残っている。',
-    rewardScale: { food: 1.1, materials: 1.1, ammo: 1.2 },
-    dangerShift: 1,
-    rareBonus: 0.1,
-    encounterShift: 0.12,
-    timeShift: 0,
-    distanceShift: -1
-  },
-  {
-    id: 'shortcut',
-    name: '近道発見',
-    description: '崩れた塀の抜け道を使える。早いが、出会い頭になりやすい。',
-    rewardScale: {},
-    dangerShift: 0,
-    rareBonus: 0,
-    encounterShift: 0.04,
-    timeShift: -1,
-    distanceShift: -1
-  },
-  {
-    id: 'openGround',
-    name: '開けた視界',
-    description: '遠くから気配を掴める。銃撃と撤退判断が活きる。',
-    allowedSites: ['road'],
-    rewardScale: {},
-    dangerShift: -1,
-    rareBonus: 0,
-    encounterShift: -0.06,
-    timeShift: 0,
-    distanceShift: 1
-  },
-  {
-    id: 'tightAlleys',
-    name: '狭い路地',
-    description: '遮蔽物だらけで物資は隠れているが、接敵距離が近い。',
-    allowedSites: ['store', 'clinic'],
-    rewardScale: { food: 1.1, medicine: 1.1 },
-    dangerShift: 1,
-    rareBonus: 0.06,
-    encounterShift: 0.08,
-    timeShift: 0,
-    distanceShift: -1
-  }
-];
-
-export const BOX_TYPES: BoxType[] = [
-  {
-    id: 'foodCrate',
-    name: '保存食コンテナ',
-    description: '缶詰と乾パンが詰まっている。重いが価値は明快だ。',
-    allowedSites: ['store', 'road'],
-    rewardScale: { food: 1.8, materials: 0.6, medicine: 0.4 },
-    safeScale: 0.4,
-    toolsScale: 0.8,
-    boldScale: 1.05,
-    toolsCost: 1,
-    boldWeaponDamage: 1,
-    rareOnBold: false,
-    specialLabel: '中身を選別',
-    specialDetail: '食料を多めに確保し、士気も少し回復。STA-2。'
-  },
-  {
-    id: 'medCase',
-    name: '医療ケース',
-    description: '中身は壊れやすい。丁寧に開けるほど薬品を守れる。',
-    allowedSites: ['clinic', 'store'],
-    rewardScale: { food: 0.4, materials: 0.5, medicine: 2 },
-    safeScale: 0.5,
-    toolsScale: 0.95,
-    boldScale: 0.8,
-    toolsCost: 1,
-    boldWeaponDamage: 2,
-    rareOnBold: true,
-    specialLabel: '滅菌して回収',
-    specialDetail: '薬品を丁寧に確保。救護員なら追加回復。STA-2。'
-  },
-  {
-    id: 'ammoCan',
-    name: '弾薬缶',
-    description: '錆びた留め具の奥に、使える弾が残っているかもしれない。',
-    allowedSites: ['road', 'store'],
-    rewardScale: { food: 0.3, materials: 0.7, ammo: 2 },
-    safeScale: 0.35,
-    toolsScale: 0.75,
-    boldScale: 1,
-    toolsCost: 1,
-    boldWeaponDamage: 2,
-    rareOnBold: true,
-    specialLabel: '弾を選別',
-    specialDetail: '使える弾薬を多めに確保。銃器運用でさらに+。STA-2。'
-  },
-  {
-    id: 'toolLocker',
-    name: '工具ロッカー',
-    description: '資材と補修具が期待できる。こじ開ければ武器は傷む。',
-    allowedSites: ['road', 'clinic'],
-    rewardScale: { materials: 1.8, ammo: 0.8, medicine: 0.5 },
-    safeScale: 0.45,
-    toolsScale: 0.85,
-    boldScale: 1.1,
-    toolsCost: 1,
-    boldWeaponDamage: 3,
-    rareOnBold: false,
-    specialLabel: '蝶番を外す',
-    specialDetail: '資材を多めに確保。整備士なら武器状態も回復。STA-2。'
-  },
-  {
-    id: 'survivorStash',
-    name: '生存者の隠し箱',
-    description: '中身は読めない。時間をかけるほど、取りこぼしが減る。',
-    rewardScale: { food: 1.15, materials: 1.15, medicine: 1.15, ammo: 1.15 },
-    safeScale: 0.55,
-    toolsScale: 0.9,
-    boldScale: 1.2,
-    toolsCost: 2,
-    boldWeaponDamage: 2,
-    rareOnBold: true,
-    specialLabel: '痕跡を読む',
-    specialDetail: 'バランスよく回収し、希少発見も狙う。知性が高いほど有効。'
-  }
-];
-
-export const ENEMY_MODIFIERS: EnemyModifier[] = [
-  {
-    id: 'none',
-    name: '',
-    description: '通常個体。',
-    hpScale: 1,
-    attackShift: 0,
-    ammoDrop: 0,
-    distanceShift: 0
-  },
-  {
-    id: 'wounded',
-    name: '負傷した',
-    description: 'HPは低いが、血の匂いで興奮している。',
-    hpScale: 0.72,
-    attackShift: 1,
-    ammoDrop: 0,
-    distanceShift: 0
-  },
-  {
-    id: 'armed',
-    name: '武装した',
-    description: '危険だが、倒せば弾薬を拾える可能性がある。',
-    hpScale: 1.08,
-    attackShift: 2,
-    ammoDrop: 1,
-    distanceShift: 0
-  },
-  {
-    id: 'frenzied',
-    name: '興奮した',
-    description: '距離を詰めやすく、攻撃も重い。',
-    hpScale: 1,
-    attackShift: 2,
-    behavior: 'brute',
-    ammoDrop: 0,
-    distanceShift: -1
-  },
-  {
-    id: 'lurker',
-    name: '潜んでいた',
-    description: '出会い頭になりやすいが、体力は低め。',
-    hpScale: 0.9,
-    attackShift: 0,
-    behavior: 'stalker',
-    ammoDrop: 0,
-    distanceShift: -1
-  }
-];
+export type {
+  BackgroundId,
+  BoxId,
+  BoxType,
+  CombatAction,
+  CombatPreview,
+  CombatState,
+  DailyCondition,
+  EnemyModifier,
+  EnemyModifierId,
+  EnemyState,
+  EnemyTemplate,
+  EventChoiceId,
+  EventState,
+  ExplorationSite,
+  GameResult,
+  GameState,
+  GrowthChoice,
+  GrowthChoiceId,
+  Resources,
+  RetreatPreview,
+  SiteId,
+  SiteProfile,
+  SiteTag
+} from './gameTypes.js';
+export {
+  BACKGROUNDS,
+  BOX_TYPES,
+  CONFIG,
+  DAILY_CONDITIONS,
+  ENEMY_MODIFIERS,
+  GROWTH_CHOICES,
+  SITES,
+  SITE_TAGS,
+  combatLabels
+} from './gameData.js';
 
 export const initialState = (): GameState => ({
   phase: 'setup',
@@ -590,10 +80,12 @@ export const initialState = (): GameState => ({
   base: {
     day: 1,
     timeLeft: CONFIG.dayTime,
+    routeProgress: 0,
     food: 8,
     materials: 4,
     medicine: 2,
     ammo: 3,
+    fuel: 3,
     defense: 1,
     morale: 72,
     infirmaryLevel: 1
@@ -628,11 +120,17 @@ export const initialState = (): GameState => ({
   },
   condition: DAILY_CONDITIONS[0],
   siteTags: emptySiteTags(),
+  availableSiteIds: ['road', 'store', 'gas'],
   combat: null,
   event: null,
   haul: emptyResources(),
   lastSiteId: null,
-  journal: ['1日目: バリケードはまだ持つ。物資は持たない。'],
+  expeditionDepth: 0,
+  threat: 0,
+  journal: [
+    '目標: 北丘送信塔まで180km。そこからなら、まだ外へ届く。',
+    '1日目: 改造ワゴンは崩れかけた高架下でエンジンを温めている。'
+  ],
   combatLog: []
 });
 
@@ -645,35 +143,53 @@ export function canUseCombatAction(state: GameState, action: CombatAction): bool
     && (action !== 'shoot' || state.base.ammo > 0);
 }
 
+export function canFieldPatch(state: GameState): boolean {
+  return state.result === 'ongoing'
+    && state.phase === 'aftermath'
+    && state.base.materials >= CONFIG.fieldPatchMaterialCost
+    && state.base.timeLeft >= CONFIG.fieldPatchTimeCost
+    && state.player.hp < state.player.maxHp;
+}
+
 export function getSite(siteId: SiteId): ExplorationSite {
   const site = SITES.find((candidate) => candidate.id === siteId);
   if (!site) throw new Error(`unknown site: ${siteId}`);
   return site;
 }
 
+export function getAvailableSites(state: GameState): ExplorationSite[] {
+  return state.availableSiteIds.map(getSite);
+}
+
 export function getSiteProfile(state: GameState, siteId: SiteId): SiteProfile {
   const site = getSite(siteId);
+  const routeAdjustment = getRouteSiteAdjustment(state, site);
+  const depthBonus = expeditionRewardBonus(state);
+  const pressure = state.threat;
+  const threatDanger = Math.floor(pressure / 3);
+  const threatDistanceShift = -Math.floor(pressure / 4);
   const conditionApplies = !state.condition.siteId || state.condition.siteId === siteId;
   const tags = state.siteTags[siteId] ?? [];
   const rewardScale = combineResourceScales([
+    routeAdjustment.rewardScale,
     conditionApplies ? state.condition.rewardScale : {},
     ...tags.map((tag) => tag.rewardScale)
   ]);
-  const dangerShift = (conditionApplies ? state.condition.dangerShift : 0) + tags.reduce((sum, tag) => sum + tag.dangerShift, 0);
-  const rareBonus = (conditionApplies ? state.condition.rareBonus : 0) + tags.reduce((sum, tag) => sum + tag.rareBonus, 0);
-  const encounterShift = (conditionApplies ? state.condition.encounterShift : 0) + tags.reduce((sum, tag) => sum + tag.encounterShift, 0);
-  const timeShift = (conditionApplies ? state.condition.timeShift : 0) + tags.reduce((sum, tag) => sum + tag.timeShift, 0);
-  const distanceShift = tags.reduce((sum, tag) => sum + tag.distanceShift, 0);
+  const dangerShift = routeAdjustment.dangerShift + (conditionApplies ? state.condition.dangerShift : 0) + tags.reduce((sum, tag) => sum + tag.dangerShift, 0);
+  const rareBonus = routeAdjustment.rareBonus + (conditionApplies ? state.condition.rareBonus : 0) + tags.reduce((sum, tag) => sum + tag.rareBonus, 0);
+  const encounterShift = routeAdjustment.encounterShift + (conditionApplies ? state.condition.encounterShift : 0) + tags.reduce((sum, tag) => sum + tag.encounterShift, 0);
+  const timeShift = routeAdjustment.timeShift + (conditionApplies ? state.condition.timeShift : 0) + tags.reduce((sum, tag) => sum + tag.timeShift, 0);
+  const distanceShift = routeAdjustment.distanceShift + tags.reduce((sum, tag) => sum + tag.distanceShift, 0) + threatDistanceShift;
   const minDistance = clamp(site.distanceRange[0] + distanceShift, CONFIG.minDistance, CONFIG.maxDistance);
   const maxDistance = clamp(site.distanceRange[1] + distanceShift, minDistance, CONFIG.maxDistance);
 
   return {
     ...site,
-    danger: clamp(site.danger + dangerShift, 1, 4),
+    danger: clamp(site.danger + dangerShift + threatDanger, 1, 5),
     timeCost: clamp(site.timeCost + timeShift, 1, CONFIG.dayTime),
     distanceRange: [minDistance, maxDistance],
-    rewardMultiplier: site.rewardMultiplier,
-    rareChance: clamp(site.rareChance + rareBonus, 0.02, 0.75),
+    rewardMultiplier: site.rewardMultiplier + depthBonus,
+    rareChance: clamp(site.rareChance + rareBonus + state.expeditionDepth * 0.045 + state.threat * 0.01, 0.02, 0.82),
     reward: scaleResourceByType(site.reward, rewardScale),
     encounterShift,
     conditionName: conditionApplies ? state.condition.name : '',
@@ -694,7 +210,7 @@ export function chooseBackground(prev: GameState, backgroundId: BackgroundId, rn
   state.backgroundId = backgroundId;
   state.phase = 'base';
   state.condition = pickDailyCondition(state.base.day, rng);
-  state.siteTags = generateSiteTags(rng);
+  state.siteTags = generateSiteTags(state.base.day, rng);
   if (backgroundId === 'guard') {
     state.player.maxHp += 6;
     state.player.hp += 6;
@@ -713,6 +229,7 @@ export function chooseBackground(prev: GameState, backgroundId: BackgroundId, rn
     state.player.intellect += 1;
   }
 
+  state.availableSiteIds = generateAvailableSiteIds(state, rng);
   pushJournal(state, `${getBackground(backgroundId).name}として探索を始める。${getBackground(backgroundId).perk}。`);
   pushJournal(state, `${state.condition.name}: ${state.condition.description}`);
   pushJournal(state, siteTagsSummary(state));
@@ -722,6 +239,15 @@ export function chooseBackground(prev: GameState, backgroundId: BackgroundId, rn
 export function startExploration(prev: GameState, siteId: SiteId, rng: () => number): GameState {
   const state = clone(prev);
   if (!canActAtBaseOrAftermath(state)) return state;
+
+  const pushingDeeper = state.phase === 'aftermath';
+  if (!pushingDeeper) {
+    state.expeditionDepth = 0;
+    state.threat = 0;
+  } else {
+    state.expeditionDepth += 1;
+    raiseThreat(state, 1 + Math.max(0, getSite(siteId).danger - 2), rng);
+  }
 
   const site = getSite(siteId);
   const profile = getSiteProfile(state, siteId);
@@ -734,8 +260,11 @@ export function startExploration(prev: GameState, siteId: SiteId, rng: () => num
   state.lastSiteId = siteId;
   state.player.stamina = clamp(state.player.stamina + 2, 0, state.player.maxStamina);
   pushJournal(state, `${site.name}へ向かう。時間-${profile.timeCost}h、残り${state.base.timeLeft}h。${site.rewardHint}。危険度${profile.danger} / 見返りx${profile.rewardMultiplier.toFixed(2)} / 希少${Math.round(profile.rareChance * 100)}%。`);
+  if (pushingDeeper) {
+    pushJournal(state, `さらに奥へ踏み込む。探索深度${state.expeditionDepth}、脅威${state.threat}。良い物は増えるが、退路も騒がしくなる。`);
+  }
 
-  const eventChance = clamp(0.12 + profile.danger * 0.08 + state.player.intellect * 0.01, 0.12, 0.45);
+  const eventChance = clamp(0.12 + profile.danger * 0.08 + state.player.intellect * 0.01 + state.expeditionDepth * 0.025, 0.12, 0.55);
   if (roll(rng) < eventChance) {
     state.phase = 'event';
     state.event = createEvent(site, rng);
@@ -743,7 +272,7 @@ export function startExploration(prev: GameState, siteId: SiteId, rng: () => num
     return state;
   }
 
-  const encounterChance = clamp(0.42 + profile.danger * 0.12 + state.base.day * 0.015 - state.base.defense * 0.025 - growthRank(state, 'fieldcraft') * 0.025 + profile.encounterShift, 0.2, 0.88);
+  const encounterChance = clamp(0.42 + profile.danger * 0.12 + state.base.day * 0.015 + state.threat * 0.025 - state.base.defense * 0.025 - growthRank(state, 'fieldcraft') * 0.025 + profile.encounterShift, 0.2, 0.92);
   if (roll(rng) > encounterChance) {
     const found = scaleReward(profile.reward, (0.55 + roll(rng) * 0.45) * profile.rewardMultiplier);
     addResources(state.haul, found);
@@ -754,7 +283,7 @@ export function startExploration(prev: GameState, siteId: SiteId, rng: () => num
     return state;
   }
 
-  const enemyTemplates = buildEncounter(profile, state.base.day, rng);
+  const enemyTemplates = buildEncounter(profile, state.base.day, state.threat, rng);
   const enemies = enemyTemplates.map((enemyTemplate) => createEnemy(enemyTemplate, state.base.day, rng));
   const modifierDistanceShift = enemies.reduce((shift, enemy) => Math.min(shift, enemy.modifierId === 'lurker' || enemy.modifierId === 'frenzied' ? -1 : 0), 0);
   state.phase = 'combat';
@@ -804,6 +333,7 @@ export function stepCombat(prev: GameState, action: CombatAction, rng: () => num
     player.focusTurns = 0;
   } else if (action === 'shoot') {
     state.base.ammo -= 1;
+    raiseThreat(state, 2, rng);
     const chance = rangedHitChance(state);
     if (roll(rng) < chance) {
       const damage = rollDamage(state, action, rng);
@@ -813,6 +343,21 @@ export function stepCombat(prev: GameState, action: CombatAction, rng: () => num
       pushCombat(state, '銃撃は外れた。弾薬-1。距離が近すぎるか、狙いが甘い。');
     }
     maybeAttractEnemyByGunshot(state, rng);
+    player.focusTurns = 0;
+  } else if (action === 'throwStone') {
+    const chance = thrownHitChance(state);
+    if (roll(rng) < chance) {
+      const damage = rollDamage(state, action, rng);
+      target.hp -= damage;
+      pushCombat(state, `${target.name}へ投石命中。${damage}ダメージ。音は小さいが決定力は低い。`);
+      if (roll(rng) < 0.28) {
+        combat.distance = clamp(combat.distance + 1, CONFIG.minDistance, CONFIG.maxDistance);
+        player.focusTurns = 1;
+        pushCombat(state, `${target.name}がひるむ。距離${combat.distance}へ。`);
+      }
+    } else {
+      pushCombat(state, '投石は外れた。弾薬は温存できた。');
+    }
     player.focusTurns = 0;
   } else if (action === 'guard') {
     player.guardActive = true;
@@ -843,13 +388,17 @@ export function retreat(prev: GameState): GameState {
   const state = clone(prev);
   if (state.result !== 'ongoing' || state.phase !== 'combat') return state;
 
-  state.player.hp -= CONFIG.retreatHpLoss;
-  state.base.morale -= 6;
-  state.haul = scaleReward(state.haul, 0.35);
+  const preview = getRetreatPreview(state);
+  if (!preview) return state;
+  state.player.hp -= preview.hpLoss;
+  state.base.morale -= preview.moraleLoss;
+  state.haul = scaleReward(state.haul, preview.haulKeepPercent / 100);
   state.phase = 'base';
   state.combat = null;
   state.combatLog = [];
-  pushJournal(state, `撤退。HP-${CONFIG.retreatHpLoss}、士気-6。パックに残ったのは${resourceText(state.haul)}。`);
+  state.expeditionDepth = 0;
+  state.threat = 0;
+  pushJournal(state, `撤退。HP-${preview.hpLoss}、士気-${preview.moraleLoss}。パックに残ったのは${resourceText(state.haul)}。`);
   checkGameEnd(state);
   return state;
 }
@@ -858,16 +407,44 @@ export function returnToBase(prev: GameState): GameState {
   const state = clone(prev);
   if (state.result !== 'ongoing' || state.phase !== 'aftermath') return state;
 
+  if (state.lastSiteId) {
+    const completion = completionReward(getSiteProfile(state, state.lastSiteId));
+    if (hasAnyResource(completion)) {
+      addResources(state.haul, completion);
+      pushJournal(state, `探索完了: 帰路で${resourceText(completion)}を追加回収。`);
+    }
+  }
   const experience = Math.max(1, Math.min(5, Math.ceil(resourceTotal(state.haul) / 3)));
   addResources(state.base, state.haul);
   const moraleGain = hasAnyResource(state.haul) ? 2 : 0;
   state.base.morale = clamp(state.base.morale + moraleGain, 0, 100);
-  pushJournal(state, `${resourceText(state.haul)}を拠点へ持ち帰った。`);
+  pushJournal(state, `${resourceText(state.haul)}を避難車へ積み込んだ。`);
   gainExperience(state, experience, '帰還経験');
   state.haul = emptyResources();
+  state.expeditionDepth = 0;
+  state.threat = 0;
   state.phase = 'base';
   checkGameEnd(state);
   openGrowthIfReady(state);
+  return state;
+}
+
+export function fieldPatchUp(prev: GameState): GameState {
+  const state = clone(prev);
+  if (state.result !== 'ongoing' || state.phase !== 'aftermath') return state;
+  if (!canFieldPatch(state)) {
+    pushJournal(state, `探索中の応急手当には資材${CONFIG.fieldPatchMaterialCost}、時間${CONFIG.fieldPatchTimeCost}h、負傷が必要。`);
+    return state;
+  }
+
+  state.base.materials -= CONFIG.fieldPatchMaterialCost;
+  state.base.timeLeft -= CONFIG.fieldPatchTimeCost;
+  const healed = 6 + growthRank(state, 'fieldcraft') * 2 + (state.backgroundId === 'medic' ? 2 : 0);
+  const hpBefore = state.player.hp;
+  state.player.hp = clamp(state.player.hp + healed, 1, state.player.maxHp);
+  state.player.bleedTurns = 0;
+  state.player.stamina = clamp(state.player.stamina + 2, 0, state.player.maxStamina);
+  pushJournal(state, `探索中に応急手当。資材-${CONFIG.fieldPatchMaterialCost}、時間-${CONFIG.fieldPatchTimeCost}h、HP+${state.player.hp - hpBefore}。`);
   return state;
 }
 
@@ -904,6 +481,7 @@ export function resolveEventOption(prev: GameState, choiceId: EventChoiceId): Ga
       return state;
     }
     damageWeapon(state, box.boldWeaponDamage);
+    state.threat = clamp(state.threat + 1, 0, 12);
     const reward = scaleReward(rewardBase, box.boldScale * profile.rewardMultiplier);
     addResources(state.haul, reward);
     if (box.rareOnBold) maybeGrantRareFind(state, site, () => 0);
@@ -916,10 +494,41 @@ export function resolveEventOption(prev: GameState, choiceId: EventChoiceId): Ga
   return state;
 }
 
+export function advanceRoute(prev: GameState, rng: () => number = Math.random): GameState {
+  const state = clone(prev);
+  if (state.result !== 'ongoing' || state.phase !== 'base') return state;
+  if (state.base.timeLeft < CONFIG.travelTimeCost) {
+    pushJournal(state, `避難車を進めるには時間${CONFIG.travelTimeCost}hが必要。`);
+    return state;
+  }
+  if (state.base.fuel < CONFIG.travelFuelCost) {
+    pushJournal(state, `車を走らせる燃料が足りない。燃料${CONFIG.travelFuelCost}が必要。`);
+    return state;
+  }
+  if (state.base.food < CONFIG.travelFoodCost) {
+    pushJournal(state, `運転と警戒を続けるには食料${CONFIG.travelFoodCost}が必要。`);
+    return state;
+  }
+
+  state.base.timeLeft -= CONFIG.travelTimeCost;
+  state.base.food -= CONFIG.travelFoodCost;
+  state.base.fuel -= CONFIG.travelFuelCost;
+  const baseKm = 16 + Math.min(5, state.base.defense) * 3 + growthRank(state, 'fieldcraft') * 2;
+  const routeFind = roll(rng) < 0.28 + state.player.intellect * 0.015 + growthRank(state, 'fieldcraft') * 0.04 ? 8 : 0;
+  const km = baseKm + routeFind;
+  state.base.routeProgress = clamp(state.base.routeProgress + km, 0, CONFIG.escapeDistance);
+  state.availableSiteIds = generateAvailableSiteIds(state, rng);
+  state.base.morale = clamp(state.base.morale + (routeFind > 0 ? 2 : 0), 0, 100);
+  pushJournal(state, `避難車を進める。燃料-${CONFIG.travelFuelCost}、食料-${CONFIG.travelFoodCost}、時間-${CONFIG.travelTimeCost}h、進行+${km}km${routeFind > 0 ? '。抜け道を拾い、士気+2。' : '。'}`);
+  checkGameEnd(state);
+  return state;
+}
+
 export function endDay(prev: GameState, rng: () => number = Math.random): GameState {
   const state = clone(prev);
   if (state.result !== 'ongoing' || state.phase !== 'base') return state;
 
+  const nightDrive = resolveNightDrive(state, rng);
   const foodPaid = Math.min(state.base.food, CONFIG.nightFoodCost);
   state.base.food -= foodPaid;
   const hunger = CONFIG.nightFoodCost - foodPaid;
@@ -930,7 +539,7 @@ export function endDay(prev: GameState, rng: () => number = Math.random): GameSt
   } else {
     state.base.morale -= Math.max(0, CONFIG.nightMoralePressure - state.base.defense);
     state.player.hp = clamp(state.player.hp + 2 + state.base.infirmaryLevel, 1, state.player.maxHp);
-    pushJournal(state, `夜警で食料${CONFIG.nightFoodCost}を消費。拠点は持ちこたえた。`);
+    pushJournal(state, `夜警で食料${CONFIG.nightFoodCost}を消費。避難車は持ちこたえた。`);
   }
 
   state.player.stamina = state.player.maxStamina;
@@ -939,13 +548,20 @@ export function endDay(prev: GameState, rng: () => number = Math.random): GameSt
   state.base.day += 1;
   state.base.timeLeft = CONFIG.dayTime;
   state.condition = pickDailyCondition(state.base.day, rng);
-  state.siteTags = generateSiteTags(rng);
+  state.siteTags = generateSiteTags(state.base.day, rng);
+  state.availableSiteIds = generateAvailableSiteIds(state, rng);
 
-  if (state.base.day >= CONFIG.maxDay) {
-    return victory(state, `${CONFIG.maxDay}日目: 拠点は救援信号を上げられる日まで生き延びた。`);
+  pushJournal(state, nightDrive);
+  if (state.base.routeProgress >= CONFIG.escapeDistance) {
+    checkGameEnd(state);
+    return state;
   }
 
-  pushJournal(state, `${state.base.day}日目: 探索、補修、治療、どれを優先するか。`);
+  if (state.base.day > CONFIG.maxDay) {
+    return defeat(state, `${CONFIG.maxDay}日目の夜明け。包囲線が閉じ、送信塔への道は失われた。`);
+  }
+
+  pushJournal(state, `${state.base.day}日目: 送信塔まで残り${CONFIG.escapeDistance - state.base.routeProgress}km。探索、補修、移動、どれを優先するか。`);
   pushJournal(state, `${state.condition.name}: ${state.condition.description}`);
   pushJournal(state, siteTagsSummary(state));
   checkGameEnd(state);
@@ -985,13 +601,13 @@ export function reinforceDefense(prev: GameState): GameState {
 
   const cost = defenseCost(state);
   if (state.base.materials < cost) {
-    pushJournal(state, `門の補強には資材${cost}が必要。`);
+    pushJournal(state, `車体補強には資材${cost}が必要。`);
     return state;
   }
   state.base.materials -= cost;
   state.base.defense += 1;
   state.base.morale = clamp(state.base.morale + 3, 0, 100);
-  pushJournal(state, `門を補強。防衛力が${state.base.defense}へ上昇。`);
+  pushJournal(state, `車体を補強。車体強度が${state.base.defense}へ上昇。移動時の安全も少し増す。`);
   return state;
 }
 
@@ -1001,13 +617,13 @@ export function upgradeInfirmary(prev: GameState): GameState {
 
   const cost = infirmaryCost(state);
   if (state.base.materials < cost || state.base.medicine < 1) {
-    pushJournal(state, `診療所の改善には資材${cost}と薬品1が必要。`);
+    pushJournal(state, `救護棚の整理には資材${cost}と薬品1が必要。`);
     return state;
   }
   state.base.materials -= cost;
   state.base.medicine -= 1;
   state.base.infirmaryLevel += 1;
-  pushJournal(state, `診療所Lv${state.base.infirmaryLevel}。治療と戦闘中の休息が強化。`);
+  pushJournal(state, `救護棚Lv${state.base.infirmaryLevel}。治療と戦闘中の休息が強化。`);
   return state;
 }
 
@@ -1081,7 +697,7 @@ export function weaponRepairCost(state: GameState): number {
 }
 
 export function resourceText(resources: Resources): string {
-  return `食料${resources.food} / 資材${resources.materials} / 薬品${resources.medicine} / 弾薬${resources.ammo}`;
+  return `食料${resources.food} / 資材${resources.materials} / 薬品${resources.medicine} / 弾薬${resources.ammo} / 燃料${resources.fuel}`;
 }
 
 export function getCombatPreview(state: GameState, action: CombatAction): CombatPreview | null {
@@ -1091,15 +707,34 @@ export function getCombatPreview(state: GameState, action: CombatAction): Combat
   if (action === 'rest') return { hitPercent: 100, damageMin: 0, damageMax: 0, note: `STA +${7 + state.base.infirmaryLevel}` };
   if (action === 'shoot' && state.base.ammo <= 0) return { hitPercent: 0, damageMin: 0, damageMax: 0, note: '弾薬なし' };
 
-  const hit = action === 'shoot' ? rangedHitChance(state) : meleeHitChance(state, action === 'heavy');
+  const hit = action === 'shoot'
+    ? rangedHitChance(state)
+    : action === 'throwStone'
+      ? thrownHitChance(state)
+      : meleeHitChance(state, action === 'heavy');
   const expected = expectedDamage(state, action);
   const uncertainty = Math.max(1, 6 - Math.floor(state.player.intellect / 2));
   return {
     hitPercent: Math.round(clamp(hit, 0.05, 0.98) * 100),
     damageMin: Math.max(1, Math.floor(expected * 0.9) - uncertainty),
     damageMax: Math.max(1, Math.ceil(expected * 1.1) + uncertainty),
-    note: action === 'shoot' ? '高命中。弾薬1消費、銃声で敵が寄る可能性' : '近距離ほど有効。武器状態を消耗'
+    note: action === 'shoot'
+      ? '高命中。弾薬1消費、銃声で敵が寄る可能性'
+      : action === 'throwStone'
+        ? '弾薬なし。中距離で牽制、まれに距離を稼ぐ'
+        : '近距離ほど有効。武器状態を消耗'
   };
+}
+
+export function getRetreatPreview(state: GameState): RetreatPreview | null {
+  if (state.result !== 'ongoing' || state.phase !== 'combat') return null;
+  const threatLoss = Math.floor(state.threat / 2);
+  const outnumberedLoss = Math.max(0, livingEnemies(state).length - 1);
+  const distanceRelief = state.combat ? Math.floor(state.combat.distance / 3) : 0;
+  const hpLoss = Math.max(3, CONFIG.retreatHpLoss + threatLoss + outnumberedLoss - distanceRelief);
+  const moraleLoss = 6 + threatLoss;
+  const haulKeepPercent = Math.round(Math.max(20, 35 - state.threat * 2 - outnumberedLoss * 3));
+  return { hpLoss, moraleLoss, haulKeepPercent };
 }
 
 function winCombat(state: GameState, rng: () => number): GameState {
@@ -1111,6 +746,7 @@ function winCombat(state: GameState, rng: () => number): GameState {
   maybeGrantRareFind(state, site, rng);
   state.player.stamina = clamp(state.player.stamina + 3, 0, state.player.maxStamina);
   state.base.morale = clamp(state.base.morale + 2, 0, 100);
+  state.threat = clamp(state.threat + 1, 0, 12);
   gainExperience(state, 2 + site.danger, '戦闘経験');
   pushCombat(state, '敵をすべて退けた。');
   pushJournal(state, `${site.name}で勝利。${resourceText(reward)}をフィールドパックへ。`);
@@ -1127,7 +763,7 @@ function enemyAct(state: GameState, rng: () => number) {
   for (const enemy of livingEnemies(state)) {
     const distance = state.combat.distance;
     const wantsClose = enemy.behavior === 'brute' ? distance > 0 : distance > 1;
-    const closeChance = enemy.behavior === 'skittish' ? 0.34 : 0.62;
+    const closeChance = clamp((enemy.behavior === 'skittish' ? 0.34 : 0.62) + Math.max(0, distance - 3) * 0.08, 0.2, 0.82);
     if (wantsClose && roll(rng) < closeChance) {
       state.combat.distance = clamp(distance - 1, CONFIG.minDistance, CONFIG.maxDistance);
       pushCombat(state, `${enemy.name}が距離${state.combat.distance}まで詰める。`);
@@ -1135,9 +771,9 @@ function enemyAct(state: GameState, rng: () => number) {
     }
 
     const packPressure = Math.max(0, livingEnemies(state).length - 1) * 0.04;
-    const chance = clamp((enemy.behavior === 'skittish' ? 0.66 : 0.76) - distance * 0.18 + packPressure, 0.18, 0.9);
+    const chance = clamp((enemy.behavior === 'skittish' ? 0.66 : 0.76) - distance * 0.16 + packPressure, 0.08, 0.9);
     if (roll(rng) < chance) {
-      let damage = Math.max(1, Math.round(enemy.attack * (1 - distance * 0.1)));
+      let damage = Math.max(1, Math.round(enemy.attack * (1 - distance * 0.08)));
       if (player.guardActive) {
         damage = Math.max(1, Math.floor(damage * 0.4));
         player.guardActive = false;
@@ -1178,14 +814,53 @@ function canActAtBaseOrAftermath(state: GameState): boolean {
   return state.result === 'ongoing' && (state.phase === 'base' || state.phase === 'aftermath');
 }
 
+function resolveNightDrive(state: GameState, rng: () => number): string {
+  if (state.base.routeProgress >= CONFIG.escapeDistance) return '夜明け前、送信塔の影が見えた。';
+
+  if (state.base.fuel >= CONFIG.nightDriveFuelCost) {
+    state.base.fuel -= CONFIG.nightDriveFuelCost;
+    const earlyEase = state.base.day <= 3 ? 4 : 0;
+    const midWear = state.base.day >= 6 ? Math.floor((state.base.day - 4) / 2) : 0;
+    const roadVariance = state.base.day <= 2 ? Math.floor(roll(rng) * 2) : Math.floor(roll(rng) * 5);
+    const km = 10 + earlyEase + Math.min(4, state.base.defense) * 2 + growthRank(state, 'fieldcraft') * 2 + roadVariance;
+    state.base.routeProgress = clamp(state.base.routeProgress + km, 0, CONFIG.escapeDistance);
+    if (midWear > 0) {
+      if (state.base.materials > 0) {
+        state.base.materials -= 1;
+        return `夜間走行。燃料-${CONFIG.nightDriveFuelCost}、進行+${km}km。荒れた路面で資材-1。`;
+      }
+      state.base.morale = clamp(state.base.morale - midWear * 2, 0, 100);
+      return `夜間走行。燃料-${CONFIG.nightDriveFuelCost}、進行+${km}km。補修材が足りず、士気-${midWear * 2}。`;
+    }
+    return `夜間走行。燃料-${CONFIG.nightDriveFuelCost}、進行+${km}km。`;
+  }
+
+  const stallLoss = state.base.day <= 3 ? 4 : 8 + Math.floor((state.base.day - 4) / 2) * 2;
+  state.base.morale = clamp(state.base.morale - stallLoss, 0, 100);
+  if (state.base.day >= 6) state.player.hp -= 2;
+  return `燃料不足で夜間走行できない。迂回路で朝を待ち、士気-${stallLoss}${state.base.day >= 6 ? '、HP-2' : ''}。`;
+}
+
+function expeditionRewardBonus(state: GameState): number {
+  if (state.phase === 'base' || state.phase === 'setup' || state.phase === 'growth' || state.phase === 'ended') return 0;
+  return state.expeditionDepth * 0.18 + Math.min(0.24, state.threat * 0.025);
+}
+
+function raiseThreat(state: GameState, amount: number, rng: () => number) {
+  const fieldcraftMitigation = growthRank(state, 'fieldcraft') > 0 && roll(rng) < growthRank(state, 'fieldcraft') * 0.16 ? 1 : 0;
+  state.threat = clamp(state.threat + Math.max(0, amount - fieldcraftMitigation), 0, 12);
+}
+
 function checkGameEnd(state: GameState) {
   if (state.result !== 'ongoing') return;
-  if (state.player.hp <= 0) {
+  if (state.base.routeProgress >= CONFIG.escapeDistance) {
+    victory(state, `北丘送信塔に到達。古い中継器はまだ息をしていた。外へ向けて救援信号を放った。`);
+  } else if (state.player.hp <= 0) {
     defeat(state, '探索者が倒れた。');
   } else if (state.base.food <= 0 && state.phase === 'base') {
-    defeat(state, '食料が尽きた。夜明け前に拠点は崩れた。');
+    defeat(state, '食料が尽きた。夜明け前に避難車の中から動けなくなった。');
   } else if (state.base.morale <= 0) {
-    defeat(state, '士気が崩壊。門は内側から開いた。');
+    defeat(state, '士気が崩壊。誰も次の運転席に座ろうとしなかった。');
   }
 }
 
@@ -1225,7 +900,7 @@ function gainExperience(state: GameState, amount: number, reason: string) {
     state.growth.level += 1;
     state.growth.nextXp += 3;
     state.growth.pending = true;
-    pushJournal(state, `探索者Lv${state.growth.level}。拠点で成長方針を選べる。`);
+    pushJournal(state, `探索者Lv${state.growth.level}。避難車で成長方針を選べる。`);
   }
 }
 
@@ -1240,18 +915,19 @@ function addResources(target: Resources, incoming: Resources) {
   target.materials += incoming.materials;
   target.medicine += incoming.medicine;
   target.ammo += incoming.ammo;
+  target.fuel += incoming.fuel;
 }
 
 function emptyResources(): Resources {
-  return { food: 0, materials: 0, medicine: 0, ammo: 0 };
+  return { food: 0, materials: 0, medicine: 0, ammo: 0, fuel: 0 };
 }
 
 function hasAnyResource(resources: Resources): boolean {
-  return resources.food + resources.materials + resources.medicine + resources.ammo > 0;
+  return resources.food + resources.materials + resources.medicine + resources.ammo + resources.fuel > 0;
 }
 
 function resourceTotal(resources: Resources): number {
-  return resources.food + resources.materials + resources.medicine + resources.ammo;
+  return resources.food + resources.materials + resources.medicine + resources.ammo + resources.fuel;
 }
 
 function scaleReward(resources: Resources, scale: number): Resources {
@@ -1259,7 +935,8 @@ function scaleReward(resources: Resources, scale: number): Resources {
     food: Math.max(0, Math.round(resources.food * scale)),
     materials: Math.max(0, Math.round(resources.materials * scale)),
     medicine: Math.max(0, Math.round(resources.medicine * scale)),
-    ammo: Math.max(0, Math.round(resources.ammo * scale))
+    ammo: Math.max(0, Math.round(resources.ammo * scale)),
+    fuel: Math.max(0, Math.round(resources.fuel * scale))
   };
 }
 
@@ -1268,17 +945,19 @@ function scaleResourceByType(resources: Resources, scale: Partial<Resources>): R
     food: Math.max(0, Math.round(resources.food * (scale.food ?? 1))),
     materials: Math.max(0, Math.round(resources.materials * (scale.materials ?? 1))),
     medicine: Math.max(0, Math.round(resources.medicine * (scale.medicine ?? 1))),
-    ammo: Math.max(0, Math.round(resources.ammo * (scale.ammo ?? 1)))
+    ammo: Math.max(0, Math.round(resources.ammo * (scale.ammo ?? 1))),
+    fuel: Math.max(0, Math.round(resources.fuel * (scale.fuel ?? 1)))
   };
 }
 
 function combineResourceScales(scales: Array<Partial<Resources>>): Partial<Resources> {
-  const combined: Resources = { food: 1, materials: 1, medicine: 1, ammo: 1 };
+  const combined: Resources = { food: 1, materials: 1, medicine: 1, ammo: 1, fuel: 1 };
   for (const scale of scales) {
     combined.food *= scale.food ?? 1;
     combined.materials *= scale.materials ?? 1;
     combined.medicine *= scale.medicine ?? 1;
     combined.ammo *= scale.ammo ?? 1;
+    combined.fuel *= scale.fuel ?? 1;
   }
   return combined;
 }
@@ -1342,9 +1021,11 @@ function resolveBoxSpecial(state: GameState, site: ExplorationSite, profile: Sit
   pushJournal(state, `${box.name}の痕跡を読む。${resourceText(reward)}を得た。`);
 }
 
-function buildEncounter(site: SiteProfile, day: number, rng: () => number): EnemyTemplate[] {
+function buildEncounter(site: SiteProfile, day: number, threat: number, rng: () => number): EnemyTemplate[] {
   const countRoll = roll(rng);
-  const dayPressure = clamp((day - 1) * 0.025, 0, 0.18);
+  const earlyRelief = day <= 2 ? -0.12 : 0;
+  const midSpike = day >= 6 ? 0.08 : 0;
+  const dayPressure = clamp((day - 1) * 0.025 + threat * 0.025 + earlyRelief + midSpike, -0.12, 0.34);
   let count = 1;
 
   if (site.danger === 1) {
@@ -1357,7 +1038,8 @@ function buildEncounter(site: SiteProfile, day: number, rng: () => number): Enem
     else if (countRoll < 0.88 + dayPressure) count = 2;
   }
 
-  return Array.from({ length: count }, () => pick(site.enemies, rng));
+  if (threat >= 7 && roll(rng) < 0.28) count += 1;
+  return Array.from({ length: clamp(count, 1, 4) }, () => pick(site.enemies, rng));
 }
 
 function pickDailyCondition(day: number, rng: () => number): DailyCondition {
@@ -1365,13 +1047,121 @@ function pickDailyCondition(day: number, rng: () => number): DailyCondition {
   return pick(DAILY_CONDITIONS, rng);
 }
 
-function generateSiteTags(rng: () => number): Record<SiteId, SiteTag[]> {
+function generateAvailableSiteIds(state: GameState, rng: () => number): SiteId[] {
+  const picked: SiteId[] = [];
+  const attempts = [...SITES];
+  while (picked.length < CONFIG.visibleSiteChoices && attempts.length > 0) {
+    const totalWeight = attempts.reduce((sum, site) => sum + siteOfferWeight(state, site), 0);
+    let cursor = roll(rng) * Math.max(0.01, totalWeight);
+    let index = 0;
+    for (let i = 0; i < attempts.length; i += 1) {
+      cursor -= siteOfferWeight(state, attempts[i]);
+      if (cursor <= 0) {
+        index = i;
+        break;
+      }
+    }
+    picked.push(attempts[index].id);
+    attempts.splice(index, 1);
+  }
+
+  if (picked.length < CONFIG.visibleSiteChoices) {
+    for (const site of SITES) {
+      if (!picked.includes(site.id)) picked.push(site.id);
+      if (picked.length >= CONFIG.visibleSiteChoices) break;
+    }
+  }
+
+  return picked;
+}
+
+function siteOfferWeight(state: GameState, site: ExplorationSite): number {
+  const progress = routeProgressRatio(state);
+  let weight = 1;
+
+  if (progress < 0.25) {
+    const earlyWeights: Record<SiteId, number> = { road: 5, store: 4, gas: 3.4, clinic: 1.1, checkpoint: state.base.day <= 2 ? 0.05 : 0.6 };
+    weight = earlyWeights[site.id];
+  } else if (progress < 0.68) {
+    const midWeights: Record<SiteId, number> = { road: 1.3, store: 2.1, gas: 3.1, clinic: 3, checkpoint: 2.7 };
+    weight = midWeights[site.id];
+  } else {
+    const lateWeights: Record<SiteId, number> = { road: 0.25, store: 1.2, gas: 2.8, clinic: 3.4, checkpoint: 5 };
+    weight = lateWeights[site.id];
+  }
+
+  if (state.base.day >= 6) {
+    if (site.id === 'road') weight *= 0.45;
+    if (site.id === 'store') weight *= 0.75;
+    if (site.id === 'clinic') weight *= 1.25;
+    if (site.id === 'checkpoint') weight *= 1.45;
+  }
+
+  if (state.base.food <= 3 && site.id === 'store') weight += 2.6;
+  if (state.base.fuel <= 2 && site.id === 'gas') weight += 3.2;
+  if (state.base.medicine <= 1 && site.id === 'clinic') weight += 2.4;
+  if (state.base.ammo <= 1 && site.id === 'checkpoint') weight += 1.6;
+
+  return Math.max(0.05, weight);
+}
+
+function getRouteSiteAdjustment(state: GameState, site: ExplorationSite): {
+  rewardScale: Partial<Resources>;
+  dangerShift: number;
+  rareBonus: number;
+  encounterShift: number;
+  timeShift: number;
+  distanceShift: number;
+} {
+  const progress = routeProgressRatio(state);
+  if (progress < 0.25) {
+    return {
+      rewardScale: {},
+      dangerShift: site.id === 'road' || site.id === 'store' || site.id === 'gas' ? -1 : 0,
+      rareBonus: 0,
+      encounterShift: -0.04,
+      timeShift: 0,
+      distanceShift: site.id === 'road' ? 1 : 0
+    };
+  }
+
+  if (progress < 0.68) {
+    return {
+      rewardScale: site.id === 'gas' ? { fuel: 1.2 } : {},
+      dangerShift: site.id === 'road' ? 1 : 0,
+      rareBonus: site.id === 'clinic' || site.id === 'checkpoint' ? 0.04 : 0,
+      encounterShift: site.id === 'road' ? 0.04 : 0,
+      timeShift: 0,
+      distanceShift: site.id === 'store' ? -1 : 0
+    };
+  }
+
+  return {
+    rewardScale: site.id === 'checkpoint' ? { ammo: 1.25, materials: 1.15 } : site.id === 'clinic' ? { medicine: 1.2 } : {},
+    dangerShift: site.id === 'checkpoint' ? 1 : site.id === 'road' || site.id === 'store' ? 2 : 1,
+    rareBonus: site.id === 'checkpoint' || site.id === 'clinic' ? 0.08 : 0.03,
+    encounterShift: site.id === 'road' || site.id === 'store' ? 0.1 : 0.06,
+    timeShift: site.id === 'road' ? 1 : 0,
+    distanceShift: site.id === 'road' ? -1 : site.id === 'checkpoint' ? -1 : 0
+  };
+}
+
+function routeProgressRatio(state: GameState): number {
+  return clamp(state.base.routeProgress / CONFIG.escapeDistance, 0, 1);
+}
+
+function generateSiteTags(day: number, rng: () => number): Record<SiteId, SiteTag[]> {
   const result = emptySiteTags();
   for (const site of SITES) {
-    const candidates = SITE_TAGS.filter((tag) => !tag.allowedSites || tag.allowedSites.includes(site.id));
+    const candidates = SITE_TAGS.filter((tag) => {
+      if (tag.allowedSites && !tag.allowedSites.includes(site.id)) return false;
+      if (day <= 2 && (tag.id === 'freshTracks' || tag.id === 'tightAlleys')) return false;
+      return true;
+    });
     const first = pick(candidates, rng);
     result[site.id].push(first);
-    if (roll(rng) < 0.22) {
+    const secondChance = day <= 2 ? 0.05 : day >= 6 ? 0.34 : 0.22;
+    if (roll(rng) < secondChance) {
       const secondCandidates = candidates.filter((tag) => tag.id !== first.id);
       const second = pick(secondCandidates, rng);
       if (second) result[site.id].push(second);
@@ -1381,11 +1171,11 @@ function generateSiteTags(rng: () => number): Record<SiteId, SiteTag[]> {
 }
 
 function emptySiteTags(): Record<SiteId, SiteTag[]> {
-  return { store: [], clinic: [], road: [] };
+  return { store: [], clinic: [], road: [], gas: [], checkpoint: [] };
 }
 
 function siteTagsSummary(state: GameState): string {
-  return `今日の探索事情: ${SITES.map((site) => `${site.name}=${(state.siteTags[site.id] ?? []).map((tag) => tag.name).join('+') || '平常'}`).join(' / ')}`;
+  return `今日の周辺候補: ${getAvailableSites(state).map((site) => `${site.name}=${(state.siteTags[site.id] ?? []).map((tag) => tag.name).join('+') || '平常'}`).join(' / ')}`;
 }
 
 function rollInitialDistance(site: SiteProfile, rng: () => number): number {
@@ -1405,8 +1195,21 @@ function getBoxType(boxId: BoxId): BoxType {
   return box;
 }
 
-function pickEnemyModifier(rng: () => number): EnemyModifier {
+function pickEnemyModifier(rng: () => number, day = 1): EnemyModifier {
   const rollValue = roll(rng);
+  if (day <= 2) {
+    if (rollValue < 0.72) return ENEMY_MODIFIERS[0];
+    if (rollValue < 0.86) return getEnemyModifier('wounded');
+    if (rollValue < 0.94) return getEnemyModifier('lurker');
+    return getEnemyModifier('armed');
+  }
+  if (day >= 6) {
+    if (rollValue < 0.38) return ENEMY_MODIFIERS[0];
+    if (rollValue < 0.5) return getEnemyModifier('wounded');
+    if (rollValue < 0.68) return getEnemyModifier('armed');
+    if (rollValue < 0.86) return getEnemyModifier('frenzied');
+    return getEnemyModifier('lurker');
+  }
   if (rollValue < 0.52) return ENEMY_MODIFIERS[0];
   if (rollValue < 0.66) return getEnemyModifier('wounded');
   if (rollValue < 0.78) return getEnemyModifier('armed');
@@ -1422,7 +1225,7 @@ function getEnemyModifier(modifierId: EnemyModifierId): EnemyModifier {
 
 function createEnemy(template: EnemyTemplate, day: number, rng: () => number): EnemyState {
   const dayScaling = Math.max(0, day - 1);
-  const modifier = pickEnemyModifier(rng);
+  const modifier = pickEnemyModifier(rng, day);
   const maxHp = Math.max(1, Math.round((template.hp + dayScaling * 2) * modifier.hpScale));
   const behavior = modifier.behavior ?? template.behavior;
   return {
@@ -1448,7 +1251,7 @@ function maybeAttractEnemyByGunshot(state: GameState, rng: () => number) {
   if (state.combat.enemies.length >= 5) return;
 
   const profile = getSiteProfile(state, state.combat.siteId);
-  const chance = clamp(0.09 + profile.danger * 0.025 + Math.max(0, state.combat.enemies.length - 1) * 0.02 - growthRank(state, 'fieldcraft') * 0.025, 0.04, 0.24);
+  const chance = clamp(0.05 + profile.danger * 0.018 + state.threat * 0.018 + Math.max(0, state.combat.enemies.length - 1) * 0.015 - growthRank(state, 'fieldcraft') * 0.025, 0.02, 0.24);
   if (roll(rng) >= chance) return;
 
   const template = pick(profile.enemies, rng);
@@ -1498,9 +1301,16 @@ function maybeGrantRareFind(state: GameState, site: ExplorationSite, rng: () => 
 }
 
 function rareReward(site: ExplorationSite): Resources {
-  if (site.id === 'clinic') return { food: 0, materials: 0, medicine: 2 + site.danger, ammo: 0 };
-  if (site.id === 'store') return { food: 3 + site.danger, materials: 1, medicine: 0, ammo: 1 };
-  return { food: 0, materials: 3 + site.danger, medicine: 0, ammo: 2 };
+  if (site.id === 'clinic') return { food: 0, materials: 0, medicine: 2 + site.danger, ammo: 0, fuel: 0 };
+  if (site.id === 'store') return { food: 3 + site.danger, materials: 1, medicine: 0, ammo: 1, fuel: 0 };
+  return { food: 0, materials: 3 + site.danger, medicine: 0, ammo: 2, fuel: 1 };
+}
+
+function completionReward(site: ExplorationSite): Resources {
+  const bonus = Math.max(1, site.danger - 1);
+  if (site.id === 'clinic') return { food: 0, materials: 0, medicine: 1 + bonus, ammo: 0, fuel: 0 };
+  if (site.id === 'store') return { food: 2 + bonus, materials: 0, medicine: 0, ammo: 0, fuel: 0 };
+  return { food: 0, materials: 2 + bonus, medicine: 0, ammo: 1, fuel: 1 };
 }
 
 function meleeHitChance(state: GameState, heavy: boolean): number {
@@ -1511,24 +1321,36 @@ function meleeHitChance(state: GameState, heavy: boolean): number {
 
 function rangedHitChance(state: GameState): number {
   if (!state.combat) return 0;
-  const byDistance = [0.42, 0.68, 0.86, 0.9][state.combat.distance] ?? 0.72;
+  const byDistance = [0.42, 0.68, 0.84, 0.9, 0.93, 0.9][state.combat.distance] ?? 0.82;
   const intellectBonus = (state.player.intellect - 6) * 0.03;
   const mechanicBonus = state.backgroundId === 'mechanic' ? 0.07 : 0;
   return clamp(byDistance + intellectBonus + mechanicBonus + growthRank(state, 'firearms') * 0.04, 0.22, 0.97);
 }
 
+function thrownHitChance(state: GameState): number {
+  if (!state.combat) return 0;
+  const byDistance = [0.7, 0.76, 0.72, 0.58, 0.42, 0.28][state.combat.distance] ?? 0.45;
+  const intellectBonus = (state.player.intellect - 6) * 0.025;
+  const fieldcraftBonus = growthRank(state, 'fieldcraft') * 0.04;
+  return clamp(byDistance + intellectBonus + fieldcraftBonus, 0.18, 0.88);
+}
+
 function expectedDamage(state: GameState, action: CombatAction): number {
   if (!state.combat) return 0;
   if (action === 'shoot') {
-    const distanceBonus = state.combat.distance >= 2 ? 4 : state.combat.distance;
+    const distanceBonus = Math.min(6, state.combat.distance * 2);
     const mechanicBonus = state.backgroundId === 'mechanic' ? 2 : 0;
     return Math.max(3, state.player.attack + 1 + distanceBonus + mechanicBonus + growthRank(state, 'firearms') * 2);
+  }
+  if (action === 'throwStone') {
+    const distancePenalty = Math.max(0, state.combat.distance - 3);
+    return Math.max(2, 4 + Math.floor(state.player.intellect / 3) + growthRank(state, 'fieldcraft') - distancePenalty);
   }
   const heavy = action === 'heavy';
   const guardBonus = state.backgroundId === 'guard' ? 1 : 0;
   const baseDamage = (heavy ? state.player.attack + 5 : state.player.attack) + weaponDamageModifier(state) + guardBonus + growthRank(state, 'melee');
   const focusBonus = state.player.focusTurns > 0 ? 1.25 : 1;
-  return Math.max(1, baseDamage * (1 - state.combat.distance * 0.15) * focusBonus);
+  return Math.max(1, baseDamage * Math.max(0.2, 1 - state.combat.distance * 0.16) * focusBonus);
 }
 
 function getGrowthChoice(choiceId: GrowthChoiceId): GrowthChoice {
