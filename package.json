@@ -2,10 +2,14 @@
   "name": "retro-combat-lab",
   "version": "0.1.0",
   "private": true,
-  "type": "commonjs",
+  "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "npm run build --silent && node checks/game-check.js",
+    "test": "npm run build --silent && node checks/game-check.js && node checks/autoplay-check.js",
+    "test:autoplay": "npm run build --silent && node checks/autoplay-check.js",
     "start": "python3 -m http.server 4173"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
   }
 }
