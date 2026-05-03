@@ -1,0 +1,11 @@
+{
+  "name": "retro-combat-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build --silent && node checks/game-check.js",
+    "start": "python3 -m http.server 4173"
+  }
+}
