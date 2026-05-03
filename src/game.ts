@@ -6,7 +6,6 @@ import type {
   CombatAction,
   CombatPreview,
   CombatState,
-  DailyCondition,
   EnemyModifier,
   EnemyModifierId,
   EnemyState,
@@ -25,15 +24,42 @@ import type {
   SiteTag
 } from './gameTypes.js';
 import {
+  damageWeapon,
+  growthRank,
+  healBonus,
+  materialDiscount,
+  mechanicBonus
+} from './characterRules.js';
+import {
+  expectedDamage,
+  meleeHitChance,
+  rangedHitChance,
+  rollDamage,
+  thrownHitChance
+} from './combat.js';
+import {
+  buildEncounter,
+  emptySiteTags,
+  generateSiteTags,
+  pickBoxType,
+  pickDailyCondition,
+  rollInitialDistance,
+  siteTagsSummary
+} from './exploration.js';
+import {
   BACKGROUNDS,
   BOX_TYPES,
   CONFIG,
-  DAILY_CONDITIONS,
   ENEMY_MODIFIERS,
   GROWTH_CHOICES,
-  SITES,
-  SITE_TAGS
+  SITES
 } from './gameData.js';
+import { clamp, clone, pick, roll } from './gameUtils.js';
+import {
+  generateAvailableSiteIds,
+  getRouteSiteAdjustment,
+  resolveNightDrive
+} from './route.js';
 
 export type {
   BackgroundId,
@@ -64,11 +90,9 @@ export {
   BACKGROUNDS,
   BOX_TYPES,
   CONFIG,
-  DAILY_CONDITIONS,
   ENEMY_MODIFIERS,
   GROWTH_CHOICES,
   SITES,
-  SITE_TAGS,
   combatLabels
 } from './gameData.js';
 
@@ -118,7 +142,7 @@ export const initialState = (): GameState => ({
       fieldcraft: 0
     }
   },
-  condition: DAILY_CONDITIONS[0],
+  condition: pickDailyCondition(1, () => 0),
   siteTags: emptySiteTags(),
   availableSiteIds: ['road', 'store', 'gas'],
   combat: null,
@@ -133,8 +157,6 @@ export const initialState = (): GameState => ({
   ],
   combatLog: []
 });
-
-export const roll = (rng: () => number): number => rng();
 
 export function canUseCombatAction(state: GameState, action: CombatAction): boolean {
   return state.result === 'ongoing'
@@ -814,33 +836,6 @@ function canActAtBaseOrAftermath(state: GameState): boolean {
   return state.result === 'ongoing' && (state.phase === 'base' || state.phase === 'aftermath');
 }
 
-function resolveNightDrive(state: GameState, rng: () => number): string {
-  if (state.base.routeProgress >= CONFIG.escapeDistance) return '夜明け前、送信塔の影が見えた。';
-
-  if (state.base.fuel >= CONFIG.nightDriveFuelCost) {
-    state.base.fuel -= CONFIG.nightDriveFuelCost;
-    const earlyEase = state.base.day <= 3 ? 4 : 0;
-    const midWear = state.base.day >= 6 ? Math.floor((state.base.day - 4) / 2) : 0;
-    const roadVariance = state.base.day <= 2 ? Math.floor(roll(rng) * 2) : Math.floor(roll(rng) * 5);
-    const km = 10 + earlyEase + Math.min(4, state.base.defense) * 2 + growthRank(state, 'fieldcraft') * 2 + roadVariance;
-    state.base.routeProgress = clamp(state.base.routeProgress + km, 0, CONFIG.escapeDistance);
-    if (midWear > 0) {
-      if (state.base.materials > 0) {
-        state.base.materials -= 1;
-        return `夜間走行。燃料-${CONFIG.nightDriveFuelCost}、進行+${km}km。荒れた路面で資材-1。`;
-      }
-      state.base.morale = clamp(state.base.morale - midWear * 2, 0, 100);
-      return `夜間走行。燃料-${CONFIG.nightDriveFuelCost}、進行+${km}km。補修材が足りず、士気-${midWear * 2}。`;
-    }
-    return `夜間走行。燃料-${CONFIG.nightDriveFuelCost}、進行+${km}km。`;
-  }
-
-  const stallLoss = state.base.day <= 3 ? 4 : 8 + Math.floor((state.base.day - 4) / 2) * 2;
-  state.base.morale = clamp(state.base.morale - stallLoss, 0, 100);
-  if (state.base.day >= 6) state.player.hp -= 2;
-  return `燃料不足で夜間走行できない。迂回路で朝を待ち、士気-${stallLoss}${state.base.day >= 6 ? '、HP-2' : ''}。`;
-}
-
 function expeditionRewardBonus(state: GameState): number {
   if (state.phase === 'base' || state.phase === 'setup' || state.phase === 'growth' || state.phase === 'ended') return 0;
   return state.expeditionDepth * 0.18 + Math.min(0.24, state.threat * 0.025);
@@ -1021,174 +1016,6 @@ function resolveBoxSpecial(state: GameState, site: ExplorationSite, profile: Sit
   pushJournal(state, `${box.name}の痕跡を読む。${resourceText(reward)}を得た。`);
 }
 
-function buildEncounter(site: SiteProfile, day: number, threat: number, rng: () => number): EnemyTemplate[] {
-  const countRoll = roll(rng);
-  const earlyRelief = day <= 2 ? -0.12 : 0;
-  const midSpike = day >= 6 ? 0.08 : 0;
-  const dayPressure = clamp((day - 1) * 0.025 + threat * 0.025 + earlyRelief + midSpike, -0.12, 0.34);
-  let count = 1;
-
-  if (site.danger === 1) {
-    count = day >= 6 && countRoll < 0.22 + dayPressure ? 2 : 1;
-  } else if (site.danger === 2) {
-    if (countRoll < 0.2 + dayPressure) count = 3;
-    else if (countRoll < 0.68 + dayPressure) count = 2;
-  } else {
-    if (countRoll < 0.46 + dayPressure) count = 3;
-    else if (countRoll < 0.88 + dayPressure) count = 2;
-  }
-
-  if (threat >= 7 && roll(rng) < 0.28) count += 1;
-  return Array.from({ length: clamp(count, 1, 4) }, () => pick(site.enemies, rng));
-}
-
-function pickDailyCondition(day: number, rng: () => number): DailyCondition {
-  if (day <= 1) return DAILY_CONDITIONS[0];
-  return pick(DAILY_CONDITIONS, rng);
-}
-
-function generateAvailableSiteIds(state: GameState, rng: () => number): SiteId[] {
-  const picked: SiteId[] = [];
-  const attempts = [...SITES];
-  while (picked.length < CONFIG.visibleSiteChoices && attempts.length > 0) {
-    const totalWeight = attempts.reduce((sum, site) => sum + siteOfferWeight(state, site), 0);
-    let cursor = roll(rng) * Math.max(0.01, totalWeight);
-    let index = 0;
-    for (let i = 0; i < attempts.length; i += 1) {
-      cursor -= siteOfferWeight(state, attempts[i]);
-      if (cursor <= 0) {
-        index = i;
-        break;
-      }
-    }
-    picked.push(attempts[index].id);
-    attempts.splice(index, 1);
-  }
-
-  if (picked.length < CONFIG.visibleSiteChoices) {
-    for (const site of SITES) {
-      if (!picked.includes(site.id)) picked.push(site.id);
-      if (picked.length >= CONFIG.visibleSiteChoices) break;
-    }
-  }
-
-  return picked;
-}
-
-function siteOfferWeight(state: GameState, site: ExplorationSite): number {
-  const progress = routeProgressRatio(state);
-  let weight = 1;
-
-  if (progress < 0.25) {
-    const earlyWeights: Record<SiteId, number> = { road: 5, store: 4, gas: 3.4, clinic: 1.1, checkpoint: state.base.day <= 2 ? 0.05 : 0.6 };
-    weight = earlyWeights[site.id];
-  } else if (progress < 0.68) {
-    const midWeights: Record<SiteId, number> = { road: 1.3, store: 2.1, gas: 3.1, clinic: 3, checkpoint: 2.7 };
-    weight = midWeights[site.id];
-  } else {
-    const lateWeights: Record<SiteId, number> = { road: 0.25, store: 1.2, gas: 2.8, clinic: 3.4, checkpoint: 5 };
-    weight = lateWeights[site.id];
-  }
-
-  if (state.base.day >= 6) {
-    if (site.id === 'road') weight *= 0.45;
-    if (site.id === 'store') weight *= 0.75;
-    if (site.id === 'clinic') weight *= 1.25;
-    if (site.id === 'checkpoint') weight *= 1.45;
-  }
-
-  if (state.base.food <= 3 && site.id === 'store') weight += 2.6;
-  if (state.base.fuel <= 2 && site.id === 'gas') weight += 3.2;
-  if (state.base.medicine <= 1 && site.id === 'clinic') weight += 2.4;
-  if (state.base.ammo <= 1 && site.id === 'checkpoint') weight += 1.6;
-
-  return Math.max(0.05, weight);
-}
-
-function getRouteSiteAdjustment(state: GameState, site: ExplorationSite): {
-  rewardScale: Partial<Resources>;
-  dangerShift: number;
-  rareBonus: number;
-  encounterShift: number;
-  timeShift: number;
-  distanceShift: number;
-} {
-  const progress = routeProgressRatio(state);
-  if (progress < 0.25) {
-    return {
-      rewardScale: {},
-      dangerShift: site.id === 'road' || site.id === 'store' || site.id === 'gas' ? -1 : 0,
-      rareBonus: 0,
-      encounterShift: -0.04,
-      timeShift: 0,
-      distanceShift: site.id === 'road' ? 1 : 0
-    };
-  }
-
-  if (progress < 0.68) {
-    return {
-      rewardScale: site.id === 'gas' ? { fuel: 1.2 } : {},
-      dangerShift: site.id === 'road' ? 1 : 0,
-      rareBonus: site.id === 'clinic' || site.id === 'checkpoint' ? 0.04 : 0,
-      encounterShift: site.id === 'road' ? 0.04 : 0,
-      timeShift: 0,
-      distanceShift: site.id === 'store' ? -1 : 0
-    };
-  }
-
-  return {
-    rewardScale: site.id === 'checkpoint' ? { ammo: 1.25, materials: 1.15 } : site.id === 'clinic' ? { medicine: 1.2 } : {},
-    dangerShift: site.id === 'checkpoint' ? 1 : site.id === 'road' || site.id === 'store' ? 2 : 1,
-    rareBonus: site.id === 'checkpoint' || site.id === 'clinic' ? 0.08 : 0.03,
-    encounterShift: site.id === 'road' || site.id === 'store' ? 0.1 : 0.06,
-    timeShift: site.id === 'road' ? 1 : 0,
-    distanceShift: site.id === 'road' ? -1 : site.id === 'checkpoint' ? -1 : 0
-  };
-}
-
-function routeProgressRatio(state: GameState): number {
-  return clamp(state.base.routeProgress / CONFIG.escapeDistance, 0, 1);
-}
-
-function generateSiteTags(day: number, rng: () => number): Record<SiteId, SiteTag[]> {
-  const result = emptySiteTags();
-  for (const site of SITES) {
-    const candidates = SITE_TAGS.filter((tag) => {
-      if (tag.allowedSites && !tag.allowedSites.includes(site.id)) return false;
-      if (day <= 2 && (tag.id === 'freshTracks' || tag.id === 'tightAlleys')) return false;
-      return true;
-    });
-    const first = pick(candidates, rng);
-    result[site.id].push(first);
-    const secondChance = day <= 2 ? 0.05 : day >= 6 ? 0.34 : 0.22;
-    if (roll(rng) < secondChance) {
-      const secondCandidates = candidates.filter((tag) => tag.id !== first.id);
-      const second = pick(secondCandidates, rng);
-      if (second) result[site.id].push(second);
-    }
-  }
-  return result;
-}
-
-function emptySiteTags(): Record<SiteId, SiteTag[]> {
-  return { store: [], clinic: [], road: [], gas: [], checkpoint: [] };
-}
-
-function siteTagsSummary(state: GameState): string {
-  return `今日の周辺候補: ${getAvailableSites(state).map((site) => `${site.name}=${(state.siteTags[site.id] ?? []).map((tag) => tag.name).join('+') || '平常'}`).join(' / ')}`;
-}
-
-function rollInitialDistance(site: SiteProfile, rng: () => number): number {
-  const min = site.distanceRange[0];
-  const max = site.distanceRange[1];
-  if (max <= min) return min;
-  return clamp(min + Math.floor(roll(rng) * (max - min + 1)), CONFIG.minDistance, CONFIG.maxDistance);
-}
-
-function pickBoxType(siteId: SiteId, rng: () => number): BoxType {
-  return pick(BOX_TYPES.filter((box) => !box.allowedSites || box.allowedSites.includes(siteId)), rng);
-}
-
 function getBoxType(boxId: BoxId): BoxType {
   const box = BOX_TYPES.find((candidate) => candidate.id === boxId);
   if (!box) throw new Error(`unknown box type: ${boxId}`);
@@ -1313,98 +1140,8 @@ function completionReward(site: ExplorationSite): Resources {
   return { food: 0, materials: 2 + bonus, medicine: 0, ammo: 1, fuel: 1 };
 }
 
-function meleeHitChance(state: GameState, heavy: boolean): number {
-  if (!state.combat) return 0;
-  const guardBonus = state.backgroundId === 'guard' ? 0.05 : 0;
-  return clamp((heavy ? 0.72 : 0.86) - state.combat.distance * 0.19 + weaponHitModifier(state) + guardBonus + growthRank(state, 'melee') * 0.025, 0.1, 0.96);
-}
-
-function rangedHitChance(state: GameState): number {
-  if (!state.combat) return 0;
-  const byDistance = [0.42, 0.68, 0.84, 0.9, 0.93, 0.9][state.combat.distance] ?? 0.82;
-  const intellectBonus = (state.player.intellect - 6) * 0.03;
-  const mechanicBonus = state.backgroundId === 'mechanic' ? 0.07 : 0;
-  return clamp(byDistance + intellectBonus + mechanicBonus + growthRank(state, 'firearms') * 0.04, 0.22, 0.97);
-}
-
-function thrownHitChance(state: GameState): number {
-  if (!state.combat) return 0;
-  const byDistance = [0.7, 0.76, 0.72, 0.58, 0.42, 0.28][state.combat.distance] ?? 0.45;
-  const intellectBonus = (state.player.intellect - 6) * 0.025;
-  const fieldcraftBonus = growthRank(state, 'fieldcraft') * 0.04;
-  return clamp(byDistance + intellectBonus + fieldcraftBonus, 0.18, 0.88);
-}
-
-function expectedDamage(state: GameState, action: CombatAction): number {
-  if (!state.combat) return 0;
-  if (action === 'shoot') {
-    const distanceBonus = Math.min(6, state.combat.distance * 2);
-    const mechanicBonus = state.backgroundId === 'mechanic' ? 2 : 0;
-    return Math.max(3, state.player.attack + 1 + distanceBonus + mechanicBonus + growthRank(state, 'firearms') * 2);
-  }
-  if (action === 'throwStone') {
-    const distancePenalty = Math.max(0, state.combat.distance - 3);
-    return Math.max(2, 4 + Math.floor(state.player.intellect / 3) + growthRank(state, 'fieldcraft') - distancePenalty);
-  }
-  const heavy = action === 'heavy';
-  const guardBonus = state.backgroundId === 'guard' ? 1 : 0;
-  const baseDamage = (heavy ? state.player.attack + 5 : state.player.attack) + weaponDamageModifier(state) + guardBonus + growthRank(state, 'melee');
-  const focusBonus = state.player.focusTurns > 0 ? 1.25 : 1;
-  return Math.max(1, baseDamage * Math.max(0.2, 1 - state.combat.distance * 0.16) * focusBonus);
-}
-
 function getGrowthChoice(choiceId: GrowthChoiceId): GrowthChoice {
   const choice = GROWTH_CHOICES.find((candidate) => candidate.id === choiceId);
   if (!choice) throw new Error(`unknown growth choice: ${choiceId}`);
   return choice;
-}
-
-function growthRank(state: GameState, choiceId: GrowthChoiceId): number {
-  return state.growth.perks[choiceId] ?? 0;
-}
-
-function rollDamage(state: GameState, action: CombatAction, rng: () => number): number {
-  const variance = 0.88 + roll(rng) * 0.24;
-  return Math.max(1, Math.round(expectedDamage(state, action) * variance));
-}
-
-function materialDiscount(state: GameState): number {
-  return state.backgroundId === 'mechanic' ? 1 : 0;
-}
-
-function mechanicBonus(state: GameState): number {
-  return state.backgroundId === 'mechanic' ? 3 : 0;
-}
-
-function healBonus(state: GameState): number {
-  return state.backgroundId === 'medic' ? 4 : 0;
-}
-
-function weaponDamageModifier(state: GameState): number {
-  if (state.weapon.condition <= 0) return -2;
-  if (state.weapon.condition >= 17) return 2;
-  if (state.weapon.condition >= 8) return 1;
-  return 0;
-}
-
-function weaponHitModifier(state: GameState): number {
-  if (state.weapon.condition <= 0) return -0.16;
-  if (state.weapon.condition <= 5) return -0.08;
-  return 0;
-}
-
-function damageWeapon(state: GameState, amount: number) {
-  state.weapon.condition = clamp(state.weapon.condition - amount, 0, state.weapon.maxCondition);
-}
-
-function pick<T>(items: T[], rng: () => number): T {
-  return items[Math.floor(roll(rng) * items.length)] ?? items[0];
-}
-
-function clone<T>(value: T): T {
-  return structuredClone(value);
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
 }

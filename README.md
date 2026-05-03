@@ -167,6 +167,7 @@ npm run test:autoplay
 ## 開発メモ
 
 - TypeScriptでゲームロジックとUI描画を分離しています。
-- 乱数は `roll` と状態遷移関数の `rng` 引数を通して扱います。
+- 型は `src/gameTypes.ts`、マスターデータは `src/gameData.ts`、戦闘/探索/ルート補助は各専用モジュールに分けています。
+- 乱数は `src/gameUtils.ts` の `roll` と状態遷移関数の `rng` 引数を通して扱います。
 - 依存ライブラリはTypeScriptのみです。
 - `npm test` は固定シナリオ検証に加えて、複数シードの自動プレイで詰まりや状態破綻を確認します。
