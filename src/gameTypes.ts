@@ -7,6 +7,7 @@ export type GameResult = 'ongoing' | 'victory' | 'defeat';
 export type EventKind = 'box' | 'road' | 'signal' | 'vehicle' | 'survivor';
 export type EventChoiceId = 'safe' | 'tools' | 'bold' | 'special';
 export type GrowthChoiceId = 'melee' | 'firearms' | 'fieldcraft';
+export type RelicId = 'roadAtlas' | 'triageManual' | 'luckyBolt' | 'ammoGauge';
 export type DailyConditionId = 'clear' | 'fog' | 'rain' | 'raiders' | 'quiet';
 export type SiteTagId = 'locked' | 'burned' | 'freshTracks' | 'shortcut' | 'openGround' | 'tightAlleys';
 export type BoxId = 'foodCrate' | 'medCase' | 'ammoCan' | 'toolLocker' | 'survivorStash';
@@ -84,6 +85,12 @@ export interface SiteProfile extends ExplorationSite {
   encounterShift: number;
   conditionName: string;
   tags: SiteTag[];
+}
+
+export interface LocationProgress {
+  progress: number;
+  required: number;
+  cleared: boolean;
 }
 
 export interface SiteTag {
@@ -181,6 +188,12 @@ export interface GrowthState {
   perks: Record<GrowthChoiceId, number>;
 }
 
+export interface Relic {
+  id: RelicId;
+  name: string;
+  description: string;
+}
+
 export interface CombatState {
   siteId: SiteId;
   blockadeId?: RouteBlockadeId;
@@ -221,9 +234,11 @@ export interface GameState {
   player: Fighter;
   weapon: WeaponState;
   growth: GrowthState;
+  relics: RelicId[];
   condition: DailyCondition;
   siteTags: Record<SiteId, SiteTag[]>;
   availableSiteIds: SiteId[];
+  locationProgress: Record<SiteId, LocationProgress>;
   routeBlockade: RouteBlockadeId | null;
   clearedBlockades: Record<RouteBlockadeId, boolean>;
   combat: CombatState | null;

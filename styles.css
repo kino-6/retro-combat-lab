@@ -694,6 +694,52 @@ canvas {
   font-size: 13px;
 }
 
+.relic-row {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.relic-row b,
+.forecast-box b {
+  color: var(--gold);
+}
+
+.relic-row span {
+  display: grid;
+  gap: 4px;
+}
+
+.relic-row em {
+  color: #ffffff;
+  font-style: normal;
+}
+
+.forecast-box {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 8px;
+  border: 1px solid var(--line-soft);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.forecast-box span {
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.forecast-box small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
 .resource-help {
   display: grid;
   gap: 7px;

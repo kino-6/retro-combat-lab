@@ -62,8 +62,10 @@ export function emptySiteTags(): Record<SiteId, SiteTag[]> {
 
 export function siteTagsSummary(state: GameState): string {
   const sites = state.availableSiteIds
+    .filter((siteId) => !state.locationProgress[siteId]?.cleared)
     .map((siteId) => SITES.find((candidate) => candidate.id === siteId))
     .filter((site) => Boolean(site));
+  if (sites.length === 0) return '今日の周辺候補: 目ぼしい場所は漁り切った。進むか、夜を待つしかない。';
   return `今日の周辺候補: ${sites.map((site) => `${site!.name}=${(state.siteTags[site!.id] ?? []).map((tag) => tag.name).join('+') || '平常'}`).join(' / ')}`;
 }
 

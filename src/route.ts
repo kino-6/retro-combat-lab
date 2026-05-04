@@ -92,7 +92,7 @@ export function resolveNightDrive(state: GameState, rng: () => number): string {
 
 export function generateAvailableSiteIds(state: GameState, rng: () => number): SiteId[] {
   const picked: SiteId[] = [];
-  const attempts = [...SITES];
+  const attempts = SITES.filter((site) => !state.locationProgress[site.id]?.cleared);
   while (picked.length < CONFIG.visibleSiteChoices && attempts.length > 0) {
     const totalWeight = attempts.reduce((sum, site) => sum + siteOfferWeight(state, site), 0);
     let cursor = roll(rng) * Math.max(0.01, totalWeight);
@@ -110,6 +110,7 @@ export function generateAvailableSiteIds(state: GameState, rng: () => number): S
 
   if (picked.length < CONFIG.visibleSiteChoices) {
     for (const site of SITES) {
+      if (state.locationProgress[site.id]?.cleared) continue;
       if (!picked.includes(site.id)) picked.push(site.id);
       if (picked.length >= CONFIG.visibleSiteChoices) break;
     }

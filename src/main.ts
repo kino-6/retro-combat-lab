@@ -25,6 +25,8 @@ import {
   getAvailableSites,
   getBackground,
   getCombatPreview,
+  getForecastSites,
+  getRelic,
   getRouteStage,
   getRetreatPreview,
   getSite,
@@ -291,7 +293,7 @@ function renderPhasePanel(): string {
 
   if (state.phase === 'aftermath') {
     const previousSite = state.lastSiteId ? getSite(state.lastSiteId) : SITES[0];
-    const canRevisit = state.base.timeLeft >= previousSite.timeCost;
+    const canRevisit = state.base.timeLeft >= previousSite.timeCost && !state.locationProgress[previousSite.id]?.cleared;
     const patchDisabled = canFieldPatch(state) ? '' : 'disabled';
     return `
       <section class="panel command-panel">
@@ -355,6 +357,9 @@ function renderRouteBlockadePanel(): string {
 
 function renderSites(compact: boolean): string {
   const sites = getAvailableSites(state);
+  if (sites.length === 0) {
+    return `<p class="summary">周辺の目ぼしい場所は漁り切った。補修して進むか、日を送って別の道を探すしかない。</p>`;
+  }
   return `
     <div class="site-grid ${compact ? 'compact' : ''}">
       ${sites.map((site, index) => `
@@ -367,6 +372,7 @@ function renderSites(compact: boolean): string {
 function renderSiteCard(siteId: SiteId, compact: boolean, index: number): string {
   const site = getSite(siteId);
   const profile = getSiteProfile(state, siteId);
+  const progress = state.locationProgress[siteId];
   const routeStage = getRouteStage(state);
   const tags = [routeStage.name, profile.conditionName, ...profile.tags.map((tag) => tag.name)].filter(Boolean).slice(0, 2).join(' / ');
   const key = String(index + 1);
@@ -379,6 +385,7 @@ function renderSiteCard(siteId: SiteId, compact: boolean, index: number): string
           ${compact ? '' : `<p>${site.description}</p>`}
           <div class="hint">${site.rewardHint}${tags ? ` / ${tags}` : ''}</div>
           <div class="site-meta">
+            <span>調査 ${progress.progress}/${progress.required}</span>
             <span>時間 ${profile.timeCost}h</span>
             <span>接敵距離 ${profile.distanceRange[0]}-${profile.distanceRange[1]}</span>
             <span>見返り x${profile.rewardMultiplier.toFixed(2)} / 希少 ${Math.round(profile.rareChance * 100)}%</span>
@@ -424,6 +431,13 @@ function renderPlayerPanel(): string {
       <div class="stat-line"><b>基礎</b><span>攻撃 ${statScore(player.attack)} / 知性 ${statScore(player.intellect)} / 幸運 ${statScore(player.luck)}</span></div>
       <div class="stat-line"><b>技能Lv</b><span>近接 ${skillLevel(state.growth.perks.melee)} / 銃器 ${skillLevel(state.growth.perks.firearms)} / 野外 ${skillLevel(state.growth.perks.fieldcraft)}</span></div>
       <div class="equipment-line">武器: ${state.weapon.name} ${state.weapon.condition}/${state.weapon.maxCondition}</div>
+      <div class="relic-row">
+        <b>レリック</b>
+        <span>${state.relics.length ? state.relics.map((relicId) => {
+          const relic = getRelic(relicId);
+          return `<em title="${relic.description}">${relic.name}</em>`;
+        }).join('') : 'なし'}</span>
+      </div>
     </section>
   `;
 }
@@ -435,6 +449,7 @@ function renderRiskPanel(): string {
   const inField = state.phase === 'combat' || state.phase === 'combatResult' || state.phase === 'event' || state.phase === 'aftermath';
   const badgeClass = riskBadgeClass(score);
   const routeStage = getRouteStage(state);
+  const forecast = getForecastSites(state);
   return `
     <section class="panel risk-panel">
       <div class="panel-head">
@@ -454,6 +469,7 @@ function renderRiskPanel(): string {
       ${lootTotal > 0
         ? `<div class="risk-loot"><div class="small-note">未積載の荷物</div><div class="haul-row compact">${resourcePills(state.haul)}</div></div>`
         : `<p class="small-note">${inField ? 'まだ抱えている荷物はありません。' : '車内に積載済み。探索中の荷物はありません。'}</p>`}
+      ${forecast.length ? `<div class="forecast-box"><b>先読み</b><span>${forecast.map((site) => site.name).join(' → ')}</span><small>地図/知性で、次に濃くなりそうな候補を読む。</small></div>` : ''}
     </section>
   `;
 }
@@ -618,8 +634,7 @@ function handleKeydown(event: KeyboardEvent) {
     const choiceKeys: Record<string, string> = {
       '1': 'safe',
       '2': 'tools',
-      '3': 'bold',
-      '4': 'special'
+      '3': 'bold'
     };
     if (choiceKeys[key]) {
       event.preventDefault();

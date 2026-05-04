@@ -6,6 +6,7 @@ import type {
   EnemyModifier,
   ExplorationSite,
   GrowthChoice,
+  Relic,
   SiteTag
 } from './gameTypes.js';
 
@@ -206,6 +207,29 @@ export const GROWTH_CHOICES: GrowthChoice[] = [
     name: '野外技術',
     description: '危険の匂い、退路、荷物のまとめ方がうまくなる。',
     effect: '最大STA+1、士気+3。探索遭遇率が少し下がる。'
+  }
+];
+
+export const RELICS: Relic[] = [
+  {
+    id: 'roadAtlas',
+    name: '赤線だらけの道路地図',
+    description: '数手先の候補地が見える。運転時に抜け道を拾いやすい。'
+  },
+  {
+    id: 'triageManual',
+    name: '血で汚れた救護手順書',
+    description: '治療と探索中の応急手当が少し強くなる。'
+  },
+  {
+    id: 'luckyBolt',
+    name: '青く焼けたラグナット',
+    description: '希少発見率が少し上がる。'
+  },
+  {
+    id: 'ammoGauge',
+    name: '真鍮の弾薬ゲージ',
+    description: '銃器の見積もりが安定し、弾薬を見つけやすくなる。'
   }
 ];
 

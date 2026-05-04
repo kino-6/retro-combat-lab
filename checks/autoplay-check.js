@@ -189,10 +189,10 @@ function playCombatTurn(state, rng) {
 }
 
 function chooseEventChoice(state, rng) {
-  if (rng() < 0.35) return 'special';
+  const available = state.event?.choices?.map((choice) => choice.id) ?? ['safe'];
   if (state.base.materials > 2 && rng() < 0.45) return 'tools';
   if (state.weapon.condition > 6 && rng() < 0.35) return 'bold';
-  return 'safe';
+  return available[Math.floor(rng() * available.length)] ?? 'safe';
 }
 
 function chooseGrowthChoice(state, rng) {
