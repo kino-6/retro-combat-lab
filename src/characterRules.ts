@@ -17,6 +17,14 @@ export function healBonus(state: GameState): number {
   return state.backgroundId === 'medic' ? 4 : 0;
 }
 
+export function moraleHitModifier(state: GameState): number {
+  if (state.base.morale >= 85) return 0.04;
+  if (state.base.morale >= 65) return 0.02;
+  if (state.base.morale >= 35) return 0;
+  if (state.base.morale >= 20) return -0.04;
+  return -0.08;
+}
+
 export function weaponDamageModifier(state: GameState): number {
   if (state.weapon.condition <= 0) return -2;
   if (state.weapon.condition >= 17) return 2;

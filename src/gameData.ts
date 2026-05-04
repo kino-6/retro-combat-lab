@@ -11,7 +11,7 @@ import type {
 
 export const CONFIG = {
   maxDay: 12,
-  escapeDistance: 180,
+  escapeDistance: 260,
   maxDistance: 5,
   minDistance: 0,
   journalLimit: 12,
@@ -29,10 +29,19 @@ export const CONFIG = {
   travelFuelCost: 1,
   nightDriveFuelCost: 1,
   visibleSiteChoices: 3,
+  checkpointGateKm: 180,
+  finalGateKm: 250,
+  blockadeAssaultTimeCost: 2,
+  checkpointDetourTimeCost: 3,
+  checkpointDetourFuelCost: 2,
+  checkpointDetourMoraleCost: 6,
+  checkpointBreachMaterialCost: 4,
   combatCosts: {
     attack: 3,
     heavy: 6,
     shoot: 4,
+    shotgun: 5,
+    grenade: 4,
     throwStone: 2,
     guard: 2,
     stepBack: 2,
@@ -51,13 +60,31 @@ export const BACKGROUNDS: Background[] = [
     id: 'mechanic',
     name: '整備士',
     description: '壊れた道具をまだ使える形に戻せる。',
-    perk: '初期資材+3、弾薬+2、車体+1、資材系コスト-1、射撃+'
+    perk: '初期資材+3、弾薬+2、グレネード+1、車体+1、資材系コスト-1、射撃+'
   },
   {
     id: 'medic',
     name: '野外救護員',
     description: '手当ての優先順位を間違えない。',
     perk: '初期薬品+2、救護棚+1、知性+1、治療量+4'
+  },
+  {
+    id: 'courier',
+    name: '元配達員',
+    description: '崩れた道でも、使える抜け道を覚えている。',
+    perk: '初期燃料+3、最大STA+2、初期時間+1、幸運+1、野外技術+1'
+  },
+  {
+    id: 'hunter',
+    name: '元猟師',
+    description: '音を立てずに待ち、遠くの輪郭を読む。',
+    perk: '攻撃+1、知性+1、幸運+1、弾薬+3、初期士気+2、銃器運用+1'
+  },
+  {
+    id: 'teacher',
+    name: '元教師',
+    description: '紙片、標識、声の断片から意味を拾える。',
+    perk: '知性+2、幸運+1、初期士気+2、薬品+1、イベント判断と予測に強い'
   }
 ];
 
@@ -73,10 +100,10 @@ export const SITES: ExplorationSite[] = [
     rewardMultiplier: 1.18,
     rareChance: 0.2,
     rareHint: '封の残った保存箱',
-    reward: { food: 5, materials: 2, medicine: 0, ammo: 1, fuel: 0 },
+    reward: { food: 5, materials: 2, medicine: 0, ammo: 1, grenades: 0, fuel: 0 },
     enemies: [
-      { id: 'feral', name: '飢えた略奪者', hp: 24, attack: 5, behavior: 'stalker' },
-      { id: 'hound', name: 'ガラス牙の犬', hp: 18, attack: 6, behavior: 'skittish' }
+      { id: 'feral', name: '棚裏のゾンビ', hp: 24, attack: 5, behavior: 'stalker' },
+      { id: 'raider', name: '飢えた略奪者', hp: 18, attack: 6, behavior: 'skittish' }
     ]
   },
   {
@@ -90,10 +117,10 @@ export const SITES: ExplorationSite[] = [
     rewardMultiplier: 1.45,
     rareChance: 0.38,
     rareHint: '抗生剤・上等な薬品',
-    reward: { food: 1, materials: 1, medicine: 3, ammo: 0, fuel: 0 },
+    reward: { food: 1, materials: 1, medicine: 3, ammo: 0, grenades: 0, fuel: 0 },
     enemies: [
-      { id: 'patient', name: 'うわ言の患者', hp: 28, attack: 6, behavior: 'stalker' },
-      { id: 'orderly', name: '錆びた介護士', hp: 34, attack: 7, behavior: 'brute' }
+      { id: 'patient', name: '患者ゾンビ', hp: 28, attack: 6, behavior: 'stalker' },
+      { id: 'orderly', name: '巨体の看護ゾンビ', hp: 34, attack: 7, behavior: 'brute' }
     ]
   },
   {
@@ -107,7 +134,7 @@ export const SITES: ExplorationSite[] = [
     rewardMultiplier: 1,
     rareChance: 0.1,
     rareHint: '工具箱',
-    reward: { food: 1, materials: 5, medicine: 0, ammo: 2, fuel: 2 },
+    reward: { food: 1, materials: 5, medicine: 0, ammo: 2, grenades: 0, fuel: 2 },
     enemies: [
       { id: 'drifter', name: '腹を空かせた放浪者', hp: 20, attack: 4, behavior: 'skittish' },
       { id: 'crawler', name: '側溝の這うもの', hp: 26, attack: 5, behavior: 'stalker' }
@@ -124,10 +151,10 @@ export const SITES: ExplorationSite[] = [
     rewardMultiplier: 1.12,
     rareChance: 0.22,
     rareHint: '使える携行缶',
-    reward: { food: 1, materials: 2, medicine: 0, ammo: 1, fuel: 5 },
+    reward: { food: 1, materials: 2, medicine: 0, ammo: 1, grenades: 0, fuel: 5 },
     enemies: [
       { id: 'siphoner', name: '燃料抜きの男', hp: 24, attack: 5, behavior: 'skittish' },
-      { id: 'pumpThing', name: '給油機の影', hp: 30, attack: 6, behavior: 'stalker' }
+      { id: 'pumpThing', name: '給油機そばの死者', hp: 30, attack: 6, behavior: 'stalker' }
     ]
   },
   {
@@ -137,13 +164,13 @@ export const SITES: ExplorationSite[] = [
     danger: 4,
     timeCost: 3,
     distanceRange: [1, 3],
-    rewardHint: '弾薬++ / 資材+ / 燃料少',
+    rewardHint: '弾薬++ / グレネード / 資材+ / 燃料少',
     rewardMultiplier: 1.65,
     rareChance: 0.42,
     rareHint: '未開封の弾薬箱',
-    reward: { food: 0, materials: 3, medicine: 1, ammo: 4, fuel: 1 },
+    reward: { food: 0, materials: 3, medicine: 1, ammo: 4, grenades: 1, fuel: 1 },
     enemies: [
-      { id: 'sentinel', name: '検問の歩哨', hp: 34, attack: 8, behavior: 'brute' },
+      { id: 'sentinel', name: '装備ゾンビ', hp: 34, attack: 8, behavior: 'brute' },
       { id: 'rifleman', name: '弾帯の略奪者', hp: 28, attack: 8, behavior: 'stalker' }
     ]
   }
@@ -152,7 +179,9 @@ export const SITES: ExplorationSite[] = [
 export const combatLabels: Record<CombatAction, string> = {
   attack: '攻撃',
   heavy: '強攻撃',
-  shoot: '銃撃',
+  shoot: 'ハンドガン',
+  shotgun: 'ショットガン',
+  grenade: 'グレネード',
   throwStone: '投石',
   guard: 'ガード',
   stepBack: '後退',
@@ -341,9 +370,9 @@ export const BOX_TYPES: BoxType[] = [
   {
     id: 'ammoCan',
     name: '弾薬缶',
-    description: '錆びた留め具の奥に、使える弾が残っているかもしれない。',
-    allowedSites: ['road', 'store'],
-    rewardScale: { food: 0.3, materials: 0.7, ammo: 2 },
+    description: '錆びた留め具の奥に、使える弾や古い破片手榴弾が残っているかもしれない。',
+    allowedSites: ['road', 'store', 'checkpoint'],
+    rewardScale: { food: 0.3, materials: 0.7, ammo: 2, grenades: 1.5 },
     safeScale: 0.35,
     toolsScale: 0.75,
     boldScale: 1,

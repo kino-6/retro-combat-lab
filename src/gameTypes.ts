@@ -1,8 +1,10 @@
-export type CombatAction = 'attack' | 'heavy' | 'shoot' | 'throwStone' | 'guard' | 'stepBack' | 'rest';
+export type CombatAction = 'attack' | 'heavy' | 'shoot' | 'shotgun' | 'grenade' | 'throwStone' | 'guard' | 'stepBack' | 'rest';
 export type SiteId = 'store' | 'clinic' | 'road' | 'gas' | 'checkpoint';
-export type BackgroundId = 'guard' | 'mechanic' | 'medic';
-export type Phase = 'setup' | 'base' | 'event' | 'combat' | 'aftermath' | 'growth' | 'ended';
+export type BackgroundId = 'guard' | 'mechanic' | 'medic' | 'courier' | 'hunter' | 'teacher';
+export type RouteBlockadeId = 'checkpoint' | 'final';
+export type Phase = 'setup' | 'base' | 'event' | 'combat' | 'combatResult' | 'aftermath' | 'growth' | 'ended';
 export type GameResult = 'ongoing' | 'victory' | 'defeat';
+export type EventKind = 'box' | 'road' | 'signal' | 'vehicle' | 'survivor';
 export type EventChoiceId = 'safe' | 'tools' | 'bold' | 'special';
 export type GrowthChoiceId = 'melee' | 'firearms' | 'fieldcraft';
 export type DailyConditionId = 'clear' | 'fog' | 'rain' | 'raiders' | 'quiet';
@@ -15,6 +17,7 @@ export interface Resources {
   materials: number;
   medicine: number;
   ammo: number;
+  grenades: number;
   fuel: number;
 }
 
@@ -35,6 +38,7 @@ export interface Fighter {
   maxStamina: number;
   attack: number;
   intellect: number;
+  luck: number;
   guardActive: boolean;
   bleedTurns: number;
   focusTurns: number;
@@ -141,8 +145,9 @@ export interface EventChoice {
 }
 
 export interface EventState {
+  kind: EventKind;
   siteId: SiteId;
-  boxId: BoxId;
+  boxId?: BoxId;
   title: string;
   description: string;
   choices: EventChoice[];
@@ -178,9 +183,26 @@ export interface GrowthState {
 
 export interface CombatState {
   siteId: SiteId;
+  blockadeId?: RouteBlockadeId;
   enemies: EnemyState[];
+  pendingSpawns: PendingEnemySpawn[];
   distance: number;
   turn: number;
+}
+
+export interface PendingEnemySpawn {
+  enemy: EnemyState;
+  distance: number;
+  turns: number;
+  reason: 'gunshot';
+}
+
+export interface CombatResultState {
+  siteId: SiteId;
+  blockadeId?: RouteBlockadeId;
+  defeatedNames: string[];
+  reward: Resources;
+  message: string;
 }
 
 export interface EnemyState extends Fighter {
@@ -202,7 +224,10 @@ export interface GameState {
   condition: DailyCondition;
   siteTags: Record<SiteId, SiteTag[]>;
   availableSiteIds: SiteId[];
+  routeBlockade: RouteBlockadeId | null;
+  clearedBlockades: Record<RouteBlockadeId, boolean>;
   combat: CombatState | null;
+  combatResult: CombatResultState | null;
   event: EventState | null;
   haul: Resources;
   lastSiteId: SiteId | null;

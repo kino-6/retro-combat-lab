@@ -3,15 +3,75 @@ import type { ExplorationSite, GameState, Resources, SiteId } from './gameTypes.
 import { growthRank } from './characterRules.js';
 import { clamp, roll } from './gameUtils.js';
 
+export interface RouteStage {
+  name: string;
+  description: string;
+  dangerShift: number;
+  encounterShift: number;
+  rareBonus: number;
+  driveKmPenalty: number;
+  travelWearChance: number;
+}
+
+export function getRouteStage(state: GameState): RouteStage {
+  const progress = routeProgressRatio(state);
+  if (progress < 0.25) {
+    return {
+      name: '郊外の逃げ道',
+      description: 'まだ空いた道が残る。拾える物は平凡だが、死者の密度も薄い。',
+      dangerShift: 0,
+      encounterShift: -0.03,
+      rareBonus: 0,
+      driveKmPenalty: 0,
+      travelWearChance: 0.04
+    };
+  }
+
+  if (progress < 0.68) {
+    return {
+      name: '砂漠の迂回路',
+      description: '補給地点は減り、使える道は迂回路に寄る。燃料と補修材の価値が上がる。',
+      dangerShift: 0,
+      encounterShift: 0.02,
+      rareBonus: 0.02,
+      driveKmPenalty: 1,
+      travelWearChance: 0.1
+    };
+  }
+
+  if (progress < 0.9) {
+    return {
+      name: '検疫圏',
+      description: '退避線へ向かう車列、検問、置き去りの物資が増える。人も死者も同じ道へ集まる。',
+      dangerShift: 1,
+      encounterShift: 0.07,
+      rareBonus: 0.04,
+      driveKmPenalty: 3,
+      travelWearChance: 0.2
+    };
+  }
+
+  return {
+    name: '退避線外縁',
+    description: 'フェンスと放棄車両で道が痩せる。閉門前の混雑が、走るだけでも車を削る。',
+    dangerShift: 2,
+    encounterShift: 0.12,
+    rareBonus: 0.06,
+    driveKmPenalty: 5,
+    travelWearChance: 0.32
+  };
+}
+
 export function resolveNightDrive(state: GameState, rng: () => number): string {
-  if (state.base.routeProgress >= CONFIG.escapeDistance) return '夜明け前、送信塔の影が見えた。';
+  if (state.base.routeProgress >= CONFIG.escapeDistance) return '夜明け前、退避線の照明が砂煙の向こうに見えた。';
 
   if (state.base.fuel >= CONFIG.nightDriveFuelCost) {
     state.base.fuel -= CONFIG.nightDriveFuelCost;
+    const routeStage = getRouteStage(state);
     const earlyEase = state.base.day <= 3 ? 4 : 0;
     const midWear = state.base.day >= 6 ? Math.floor((state.base.day - 4) / 2) : 0;
     const roadVariance = state.base.day <= 2 ? Math.floor(roll(rng) * 2) : Math.floor(roll(rng) * 5);
-    const km = 10 + earlyEase + Math.min(4, state.base.defense) * 2 + growthRank(state, 'fieldcraft') * 2 + roadVariance;
+    const km = Math.max(5, 10 + earlyEase + Math.min(4, state.base.defense) * 2 + growthRank(state, 'fieldcraft') * 2 + roadVariance - routeStage.driveKmPenalty);
     state.base.routeProgress = clamp(state.base.routeProgress + km, 0, CONFIG.escapeDistance);
     if (midWear > 0) {
       if (state.base.materials > 0) {
@@ -67,12 +127,13 @@ export function getRouteSiteAdjustment(state: GameState, site: ExplorationSite):
   distanceShift: number;
 } {
   const progress = routeProgressRatio(state);
+  const stage = getRouteStage(state);
   if (progress < 0.25) {
     return {
       rewardScale: {},
-      dangerShift: site.id === 'road' || site.id === 'store' || site.id === 'gas' ? -1 : 0,
-      rareBonus: 0,
-      encounterShift: -0.04,
+      dangerShift: (site.id === 'road' || site.id === 'store' || site.id === 'gas' ? -1 : 0) + stage.dangerShift,
+      rareBonus: stage.rareBonus,
+      encounterShift: -0.04 + stage.encounterShift,
       timeShift: 0,
       distanceShift: site.id === 'road' ? 1 : 0
     };
@@ -81,9 +142,9 @@ export function getRouteSiteAdjustment(state: GameState, site: ExplorationSite):
   if (progress < 0.68) {
     return {
       rewardScale: site.id === 'gas' ? { fuel: 1.2 } : {},
-      dangerShift: site.id === 'road' ? 1 : 0,
-      rareBonus: site.id === 'clinic' || site.id === 'checkpoint' ? 0.04 : 0,
-      encounterShift: site.id === 'road' ? 0.04 : 0,
+      dangerShift: (site.id === 'road' ? 1 : 0) + stage.dangerShift,
+      rareBonus: (site.id === 'clinic' || site.id === 'checkpoint' ? 0.04 : 0) + stage.rareBonus,
+      encounterShift: (site.id === 'road' ? 0.04 : 0) + stage.encounterShift,
       timeShift: 0,
       distanceShift: site.id === 'store' ? -1 : 0
     };
@@ -91,9 +152,9 @@ export function getRouteSiteAdjustment(state: GameState, site: ExplorationSite):
 
   return {
     rewardScale: site.id === 'checkpoint' ? { ammo: 1.25, materials: 1.15 } : site.id === 'clinic' ? { medicine: 1.2 } : {},
-    dangerShift: site.id === 'checkpoint' ? 1 : site.id === 'road' || site.id === 'store' ? 2 : 1,
-    rareBonus: site.id === 'checkpoint' || site.id === 'clinic' ? 0.08 : 0.03,
-    encounterShift: site.id === 'road' || site.id === 'store' ? 0.1 : 0.06,
+    dangerShift: (site.id === 'checkpoint' ? 1 : site.id === 'road' || site.id === 'store' ? 2 : 1) + stage.dangerShift,
+    rareBonus: (site.id === 'checkpoint' || site.id === 'clinic' ? 0.08 : 0.03) + stage.rareBonus,
+    encounterShift: (site.id === 'road' || site.id === 'store' ? 0.1 : 0.06) + stage.encounterShift,
     timeShift: site.id === 'road' ? 1 : 0,
     distanceShift: site.id === 'road' ? -1 : site.id === 'checkpoint' ? -1 : 0
   };

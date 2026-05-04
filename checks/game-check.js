@@ -5,6 +5,9 @@ import {
   chooseBackground,
   chooseGrowth,
   canFieldPatch,
+  breachRouteBlockade,
+  continueCombatResult,
+  detourRouteBlockade,
   fieldPatchUp,
   getAvailableSites,
   getCombatPreview,
@@ -15,6 +18,7 @@ import {
   reinforceDefense,
   resolveEventOption,
   returnToBase,
+  startRouteBlockadeCombat,
   startExploration,
   stepCombat,
   treatWounds
@@ -36,6 +40,9 @@ import {
   state.combat.enemies = [state.combat.enemies[0]];
   state.combat.enemies[0].hp = 1;
   state = stepCombat(state, 'attack', () => 0);
+  assert.equal(state.phase, 'combatResult');
+  assert.ok(state.combatResult);
+  state = continueCombatResult(state);
   assert.equal(state.phase, 'aftermath');
   assert.ok(state.haul.materials > 0);
 
@@ -59,12 +66,54 @@ import {
   let state = initialState();
   state = chooseBackground(state, 'mechanic', sequence([0.1, 0.1, 0.1, 0.1, 0.1, 0.1]));
   assert.equal(getAvailableSites(state).length, 3);
+  state.clearedBlockades.checkpoint = true;
   state.base.routeProgress = Math.floor(CONFIG.escapeDistance * 0.75);
   state.base.day = 8;
   state = advanceRoute(state, sequence([0.98, 0.98, 0.98, 0.98]));
   const lateSites = getAvailableSites(state).map((site) => site.id);
   assert.equal(lateSites.length, 3);
   assert.ok(lateSites.includes('checkpoint') || lateSites.includes('clinic') || lateSites.includes('gas'));
+}
+
+{
+  let state = initialState();
+  state = chooseBackground(state, 'mechanic');
+  state.base.routeProgress = CONFIG.checkpointGateKm - 1;
+  state.base.fuel = 10;
+  state = advanceRoute(state, () => 0);
+  assert.equal(state.routeBlockade, 'checkpoint');
+  assert.equal(state.base.routeProgress, CONFIG.checkpointGateKm);
+  const fuelBefore = state.base.fuel;
+  state = detourRouteBlockade(state);
+  assert.equal(state.routeBlockade, null);
+  assert.equal(state.clearedBlockades.checkpoint, true);
+  assert.ok(state.base.fuel < fuelBefore);
+}
+
+{
+  let state = initialState();
+  state = chooseBackground(state, 'mechanic');
+  state.base.routeProgress = CONFIG.checkpointGateKm - 1;
+  state.base.fuel = 10;
+  state.base.materials = 10;
+  state.base.grenades = 2;
+  state = advanceRoute(state, () => 0);
+  const ammoBefore = state.base.ammo;
+  state = breachRouteBlockade(state, () => 0);
+  assert.equal(state.routeBlockade, null);
+  assert.equal(state.clearedBlockades.checkpoint, true);
+  assert.ok(state.base.ammo > ammoBefore);
+}
+
+{
+  let state = initialState();
+  state = chooseBackground(state, 'mechanic');
+  state.base.routeProgress = CONFIG.checkpointGateKm - 1;
+  state.base.fuel = 10;
+  state = advanceRoute(state, () => 0);
+  state = startRouteBlockadeCombat(state, sequence([0, 0, 0]));
+  assert.equal(state.phase, 'combat');
+  assert.equal(state.combat.blockadeId, 'checkpoint');
 }
 
 {
@@ -83,9 +132,22 @@ import {
   state = chooseBackground(state, 'mechanic');
   state = startExploration(state, 'road', () => 0);
   assert.equal(state.phase, 'event');
+  assert.equal(state.event.kind, 'box');
   state = resolveEventOption(state, 'special');
   assert.equal(state.phase, 'aftermath');
   assert.ok(state.haul.food + state.haul.materials + state.haul.medicine + state.haul.ammo > 0);
+}
+
+{
+  let state = initialState();
+  state = chooseBackground(state, 'courier');
+  const progressBefore = state.base.routeProgress;
+  state = startExploration(state, 'road', sequence([0, 0.9, 0, 0]));
+  assert.equal(state.phase, 'event');
+  assert.equal(state.event.kind, 'road');
+  state = resolveEventOption(state, 'special');
+  assert.equal(state.phase, 'aftermath');
+  assert.ok(state.base.routeProgress > progressBefore);
 }
 
 {
@@ -116,6 +178,45 @@ import {
 
 {
   let state = initialState();
+  state = chooseBackground(state, 'hunter');
+  state = startExploration(state, 'road', sequence([0.99, 0, 0]));
+  state.base.ammo = 20;
+  state = stepCombat(state, 'shoot', sequence([0, 0, 0, 0, 0]));
+  assert.ok(state.combat);
+  assert.ok(state.combat.pendingSpawns.length > 0);
+  state = stepCombat(state, 'rest', () => 0);
+  assert.ok(state.combat.enemies.length > 1);
+}
+
+{
+  let state = initialState();
+  state = chooseBackground(state, 'mechanic');
+  state = startExploration(state, 'checkpoint', sequence([0.99, 0, 0, 0]));
+  assert.equal(state.phase, 'combat');
+  state.combat.distance = 1;
+  state.combat.enemies = [state.combat.enemies[0], structuredClone(state.combat.enemies[0]), structuredClone(state.combat.enemies[0])];
+  const totalHpBefore = state.combat.enemies.reduce((sum, enemy) => sum + enemy.hp, 0);
+  state = stepCombat(state, 'grenade', () => 0);
+  const totalHpAfterGrenade = state.combat.enemies.reduce((sum, enemy) => sum + enemy.hp, 0);
+  assert.ok(totalHpAfterGrenade < totalHpBefore);
+  assert.ok(state.combat.distance > 1);
+}
+
+{
+  let state = initialState();
+  state = chooseBackground(state, 'mechanic');
+  state = startExploration(state, 'store', sequence([0.99, 0, 0]));
+  assert.equal(state.phase, 'combat');
+  state.combat.distance = 1;
+  state.combat.enemies = [state.combat.enemies[0], structuredClone(state.combat.enemies[0])];
+  const secondHpBefore = state.combat.enemies[1].hp;
+  state = stepCombat(state, 'shotgun', () => 0);
+  assert.ok(state.combat.enemies[0].hp < state.combat.enemies[0].maxHp);
+  assert.ok(state.combat.enemies[1].hp < secondHpBefore);
+}
+
+{
+  let state = initialState();
   state = chooseBackground(state, 'medic');
   state = startExploration(state, 'road', sequence([0.99, 0, 0]));
   const preview = getCombatPreview(state, 'throwStone');
@@ -138,6 +239,8 @@ import {
   state.combat.enemies[0].hp = 1;
   state.player.hp = 18;
   state = stepCombat(state, 'attack', () => 0);
+  assert.equal(state.phase, 'combatResult');
+  state = continueCombatResult(state);
   assert.equal(state.phase, 'aftermath');
   const materialsBefore = state.base.materials;
   assert.ok(canFieldPatch(state));
@@ -163,6 +266,7 @@ import {
   state.combat.enemies = [state.combat.enemies[0]];
   state.combat.enemies[0].hp = 1;
   state = stepCombat(state, 'attack', () => 0);
+  state = continueCombatResult(state);
   state = returnToBase(state);
   assert.equal(state.phase, 'growth');
   const attackBefore = state.player.attack;
@@ -185,10 +289,54 @@ import {
 {
   let state = initialState();
   state = chooseBackground(state, 'guard');
+  state.clearedBlockades.checkpoint = true;
+  state.clearedBlockades.final = true;
   state.base.routeProgress = CONFIG.escapeDistance - 1;
   state.base.food = 4;
   state = advanceRoute(state, () => 0);
   assert.equal(state.result, 'victory');
+}
+
+{
+  let state = initialState();
+  state = chooseBackground(state, 'courier');
+  assert.ok(state.base.fuel > 3);
+  assert.ok(state.base.timeLeft > CONFIG.dayTime);
+  assert.ok(state.growth.perks.fieldcraft > 0);
+}
+
+{
+  let state = initialState();
+  state = chooseBackground(state, 'hunter');
+  assert.ok(state.base.ammo > 3);
+  assert.ok(state.growth.perks.firearms > 0);
+  state = startExploration(state, 'road', sequence([0.99, 0, 0]));
+  assert.ok(state.combat);
+  state.combat.distance = 5;
+  const highMoralePreview = getCombatPreview(state, 'shoot');
+  assert.ok(highMoralePreview);
+  state.base.morale = 10;
+  const lowMoralePreview = getCombatPreview(state, 'shoot');
+  assert.ok(lowMoralePreview);
+  assert.ok(highMoralePreview.hitPercent > lowMoralePreview.hitPercent);
+}
+
+{
+  let state = initialState();
+  state = chooseBackground(state, 'teacher');
+  assert.ok(state.player.intellect >= 8);
+  assert.ok(state.player.luck > 5);
+  assert.ok(state.base.medicine > 2);
+  assert.ok(state.growth.perks.fieldcraft > 0);
+}
+
+{
+  let state = initialState();
+  state = chooseBackground(state, 'teacher');
+  const luckyRareChance = getSiteProfile(state, 'store').rareChance;
+  state.player.luck = 3;
+  const unluckyRareChance = getSiteProfile(state, 'store').rareChance;
+  assert.ok(luckyRareChance > unluckyRareChance);
 }
 
 console.log('game-check ok');

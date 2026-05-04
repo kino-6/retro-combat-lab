@@ -6,8 +6,10 @@ import {
   canUseCombatAction,
   chooseBackground,
   chooseGrowth,
+  continueCombatResult,
   cookMeal,
   defenseCost,
+  detourRouteBlockade,
   endDay,
   fieldPatchUp,
   getAvailableSites,
@@ -20,6 +22,7 @@ import {
   retreat,
   returnToBase,
   startExploration,
+  startRouteBlockadeCombat,
   stepCombat,
   treatWounds,
   upgradeInfirmary,
@@ -60,7 +63,7 @@ for (let seed = 1; seed <= RUNS; seed += 1) {
       const beforeInfirmary = state.base.infirmaryLevel;
       const beforeWeapon = state.weapon.condition;
       state = playBaseTurn(state, rng, sortiesToday);
-      if (state.phase === 'combat' || state.phase === 'aftermath') sortiesToday += 1;
+      if (state.phase === 'combat' || state.phase === 'combatResult' || state.phase === 'aftermath') sortiesToday += 1;
       expeditionDepth = 0;
       localSawUpgrade ||= state.base.defense > beforeDefense || state.base.infirmaryLevel > beforeInfirmary;
       localSawRepair ||= state.weapon.condition > beforeWeapon;
@@ -88,6 +91,8 @@ for (let seed = 1; seed <= RUNS; seed += 1) {
     } else if (state.phase === 'combat') {
       localSawCombat = true;
       state = playCombatTurn(state, rng);
+    } else if (state.phase === 'combatResult') {
+      state = continueCombatResult(state);
     } else if (state.phase === 'event') {
       localSawEvent = true;
       state = resolveEventOption(state, chooseEventChoice(state, rng));
@@ -100,7 +105,11 @@ for (let seed = 1; seed <= RUNS; seed += 1) {
     assertValidState(state, seed, steps);
   }
 
-  assert.notEqual(state.result, 'ongoing', `seed ${seed} did not finish within ${MAX_STEPS} steps`);
+  assert.notEqual(
+    state.result,
+    'ongoing',
+    `seed ${seed} did not finish within ${MAX_STEPS} steps: phase=${state.phase}, day=${state.base.day}, km=${state.base.routeProgress}, block=${state.routeBlockade}, hp=${state.player.hp}, food=${state.base.food}, fuel=${state.base.fuel}, time=${state.base.timeLeft}, morale=${state.base.morale}`
+  );
   victories += state.result === 'victory' ? 1 : 0;
   defeats += state.result === 'defeat' ? 1 : 0;
   sawCombat ||= localSawCombat;
@@ -122,6 +131,7 @@ assert.ok(defeats > 0, 'autoplay found no losing run');
 console.log(`autoplay-check ok: ${RUNS} runs, ${victories} victories, ${defeats} defeats`);
 
 function playBaseTurn(state, rng, sortiesToday) {
+  if (state.routeBlockade) return playRouteBlockadeTurn(state, rng);
   if (state.player.hp <= 18 && state.base.medicine > 0) return treatWounds(state);
   if (state.player.hp <= 24 && state.base.food > 3) return cookMeal(state);
   if (state.weapon.condition <= 8 && state.base.materials >= weaponRepairCost(state)) return repairWeapon(state);
@@ -133,15 +143,35 @@ function playBaseTurn(state, rng, sortiesToday) {
   return endDay(state, rng);
 }
 
+function playRouteBlockadeTurn(state, rng) {
+  if (
+    state.routeBlockade === 'checkpoint'
+    && state.player.hp < 24
+    && state.base.fuel >= CONFIG.checkpointDetourFuelCost
+    && state.base.timeLeft >= CONFIG.checkpointDetourTimeCost
+  ) {
+    return detourRouteBlockade(state);
+  }
+  if (state.player.hp < 18 && state.base.medicine > 0) return treatWounds(state);
+  if (state.player.hp < 24 && state.base.food > 2) return cookMeal(state);
+  if (state.base.timeLeft < CONFIG.blockadeAssaultTimeCost) return endDay(state, rng);
+  return startRouteBlockadeCombat(state, rng);
+}
+
 function playCombatTurn(state, rng) {
-  if (state.player.hp <= 15) return retreat(state);
   if (!state.combat) return state;
+  const finalPush = state.combat.blockadeId === 'final';
+  if (state.player.hp <= (finalPush ? 5 : 15)) return retreat(state);
 
   const enemy = state.combat.enemies.find((candidate) => candidate.hp > 0);
+  if (!enemy && state.combat.pendingSpawns.length > 0) return stepCombat(state, 'rest', rng);
   if (!enemy) return state;
   const distance = state.combat.distance;
-  const outnumbered = state.combat.enemies.filter((candidate) => candidate.hp > 0).length > 1;
-  if (state.combat.turn > 25) return retreat(state);
+  const enemyCount = state.combat.enemies.filter((candidate) => candidate.hp > 0).length;
+  const outnumbered = enemyCount > 1;
+  if (state.combat.turn > 25 && !finalPush) return retreat(state);
+  if (enemyCount >= 3 && canUseCombatAction(state, 'grenade')) return stepCombat(state, 'grenade', rng);
+  if (outnumbered && distance <= 2 && canUseCombatAction(state, 'shotgun')) return stepCombat(state, 'shotgun', rng);
   if (state.player.stamina < 3) return stepCombat(state, 'rest', rng);
   if (enemy.hp <= 10 && canUseCombatAction(state, 'heavy')) return stepCombat(state, 'heavy', rng);
   if (enemy.hp <= 7 && distance >= 1 && canUseCombatAction(state, 'throwStone')) return stepCombat(state, 'throwStone', rng);
@@ -202,6 +232,7 @@ function chooseSite(state, rng) {
       + profile.reward.materials * (state.base.materials < 9 ? 1.2 : 0.45)
       + profile.reward.medicine * (state.base.medicine < 3 || state.player.hp < 25 ? 1.6 : 0.5)
       + profile.reward.ammo * (state.base.ammo < 4 ? 1.1 : 0.35)
+      + profile.reward.grenades * (state.base.grenades < 1 ? 2.2 : 0.45)
       + profile.reward.fuel * (state.base.fuel < 3 ? 2 : 0.4);
     const risk = profile.danger * 1.2 + Math.max(0, profile.timeCost - state.base.timeLeft) * 10;
     return { id: site.id, score: rewardNeed * profile.rewardMultiplier + profile.rareChance * 5 - risk + rng() * 1.5 };
@@ -229,7 +260,9 @@ function assertValidState(state, seed, steps) {
     state.haul.materials,
     state.haul.medicine,
     state.haul.ammo,
+    state.haul.grenades,
     state.base.ammo,
+    state.base.grenades,
     state.base.fuel,
     state.weapon.condition,
     state.growth.level,
@@ -251,13 +284,12 @@ function assertValidState(state, seed, steps) {
 }
 
 function chooseBackgroundForSeed(seed) {
-  if (seed % 3 === 0) return 'guard';
-  if (seed % 3 === 1) return 'mechanic';
-  return 'medic';
+  const backgrounds = ['guard', 'mechanic', 'medic', 'courier', 'hunter', 'teacher'];
+  return backgrounds[seed % backgrounds.length];
 }
 
 function resourceTotal(resources) {
-  return resources.food + resources.materials + resources.medicine + resources.ammo + resources.fuel;
+  return resources.food + resources.materials + resources.medicine + resources.ammo + resources.grenades + resources.fuel;
 }
 
 function makeRng(seed) {
