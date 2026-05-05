@@ -5,7 +5,7 @@ export type RouteBlockadeId = 'checkpoint' | 'final';
 export type Phase = 'setup' | 'base' | 'event' | 'combat' | 'combatResult' | 'aftermath' | 'growth' | 'ended';
 export type GameResult = 'ongoing' | 'victory' | 'defeat';
 export type EventKind = 'box' | 'road' | 'signal' | 'vehicle' | 'survivor';
-export type EventChoiceId = 'safe' | 'tools' | 'bold' | 'special';
+export type EventChoiceId = 'safe' | 'tools' | 'bold';
 export type GrowthChoiceId = 'melee' | 'firearms' | 'fieldcraft';
 export type RelicId = 'roadAtlas' | 'triageManual' | 'luckyBolt' | 'ammoGauge';
 export type DailyConditionId = 'clear' | 'fog' | 'rain' | 'raiders' | 'quiet';
@@ -118,8 +118,8 @@ export interface BoxType {
   toolsCost: number;
   boldWeaponDamage: number;
   rareOnBold: boolean;
-  specialLabel: string;
-  specialDetail: string;
+  carefulLabel: string;
+  carefulDetail: string;
 }
 
 export interface EnemyModifier {

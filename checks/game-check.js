@@ -133,7 +133,8 @@ import {
   state = startExploration(state, 'road', () => 0);
   assert.equal(state.phase, 'event');
   assert.equal(state.event.kind, 'box');
-  state = resolveEventOption(state, 'special');
+  assert.equal(state.event.choices.length, 3);
+  state = resolveEventOption(state, 'tools');
   assert.equal(state.phase, 'aftermath');
   assert.ok(state.haul.food + state.haul.materials + state.haul.medicine + state.haul.ammo > 0);
 }
@@ -145,7 +146,8 @@ import {
   state = startExploration(state, 'road', sequence([0, 0.9, 0, 0]));
   assert.equal(state.phase, 'event');
   assert.equal(state.event.kind, 'road');
-  state = resolveEventOption(state, 'special');
+  assert.equal(state.event.choices.length, 3);
+  state = resolveEventOption(state, 'tools');
   assert.equal(state.phase, 'aftermath');
   assert.ok(state.base.routeProgress > progressBefore);
 }

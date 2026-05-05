@@ -719,7 +719,7 @@ canvas {
   font-style: normal;
 }
 
-.forecast-box {
+.route-minimap {
   display: grid;
   gap: 4px;
   margin-top: 10px;
@@ -728,6 +728,54 @@ canvas {
   background: var(--panel-2);
   color: var(--muted);
   font-size: 12px;
+}
+
+.route-map-head,
+.route-map-labels {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.route-map-head b {
+  color: var(--gold);
+}
+
+.route-track {
+  position: relative;
+  height: 14px;
+  margin: 4px 0;
+  border: 1px solid var(--line);
+  background: #0a111e;
+}
+
+.route-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--green), var(--gold));
+}
+
+.route-marker {
+  position: absolute;
+  top: -4px;
+  width: 2px;
+  height: 20px;
+  background: #ffffff;
+}
+
+.route-marker.checkpoint {
+  background: var(--gold);
+}
+
+.route-marker.final {
+  background: var(--red);
+}
+
+.forecast-box {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
 }
 
 .forecast-box span {

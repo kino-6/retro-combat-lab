@@ -373,8 +373,8 @@ export const BOX_TYPES: BoxType[] = [
     toolsCost: 1,
     boldWeaponDamage: 1,
     rareOnBold: false,
-    specialLabel: '中身を選別',
-    specialDetail: '食料を多めに確保し、士気も少し回復。STA-2。'
+    carefulLabel: '中身を選別',
+    carefulDetail: '食料多め。士気+2。STA-2。'
   },
   {
     id: 'medCase',
@@ -388,8 +388,8 @@ export const BOX_TYPES: BoxType[] = [
     toolsCost: 1,
     boldWeaponDamage: 2,
     rareOnBold: true,
-    specialLabel: '滅菌して回収',
-    specialDetail: '薬品を丁寧に確保。救護員なら追加回復。STA-2。'
+    carefulLabel: '滅菌して回収',
+    carefulDetail: '薬品多め。救護員なら追加回復。STA-2。'
   },
   {
     id: 'ammoCan',
@@ -403,8 +403,8 @@ export const BOX_TYPES: BoxType[] = [
     toolsCost: 1,
     boldWeaponDamage: 2,
     rareOnBold: true,
-    specialLabel: '弾を選別',
-    specialDetail: '使える弾薬を多めに確保。銃器運用でさらに+。STA-2。'
+    carefulLabel: '弾を選別',
+    carefulDetail: '弾薬多め。銃器Lvで追加。STA-2。'
   },
   {
     id: 'toolLocker',
@@ -418,8 +418,8 @@ export const BOX_TYPES: BoxType[] = [
     toolsCost: 1,
     boldWeaponDamage: 3,
     rareOnBold: false,
-    specialLabel: '蝶番を外す',
-    specialDetail: '資材を多めに確保。整備士なら武器状態も回復。STA-2。'
+    carefulLabel: '蝶番を外す',
+    carefulDetail: '資材多め。整備士なら武器回復。STA-2。'
   },
   {
     id: 'survivorStash',
@@ -432,8 +432,8 @@ export const BOX_TYPES: BoxType[] = [
     toolsCost: 2,
     boldWeaponDamage: 2,
     rareOnBold: true,
-    specialLabel: '痕跡を読む',
-    specialDetail: 'バランスよく回収し、希少発見も狙う。知性が高いほど有効。'
+    carefulLabel: '痕跡を読む',
+    carefulDetail: '資源を広く回収。知性で希少発見。'
   }
 ];
 

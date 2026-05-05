@@ -55,6 +55,10 @@ import {
   siteTagsSummary
 } from './exploration.js';
 import {
+  createBoxEvent,
+  createStoryEvent
+} from './eventMessages.js';
+import {
   BACKGROUNDS,
   BOX_TYPES,
   CONFIG,
@@ -74,6 +78,16 @@ import {
   scaleResourceByType,
   scaleReward
 } from './resources.js';
+import {
+  advanceLocationProgress,
+  completionReward,
+  initialLocationProgress
+} from './siteProgress.js';
+import {
+  getForecastSites,
+  getRelic,
+  hasRelic
+} from './relics.js';
 import {
   generateAvailableSiteIds,
   getRouteStage,
@@ -125,16 +139,7 @@ export {
 } from './gameData.js';
 export { resourceText } from './resources.js';
 export { getRouteStage } from './route.js';
-
-function initialLocationProgress(): Record<SiteId, LocationProgress> {
-  return {
-    store: { progress: 0, required: 3, cleared: false },
-    clinic: { progress: 0, required: 3, cleared: false },
-    road: { progress: 0, required: 3, cleared: false },
-    gas: { progress: 0, required: 3, cleared: false },
-    checkpoint: { progress: 0, required: 2, cleared: false }
-  };
-}
+export { getForecastSites, getRelic, hasRelic } from './relics.js';
 
 export const initialState = (): GameState => ({
   phase: 'setup',
@@ -236,24 +241,6 @@ export function getAvailableSites(state: GameState): ExplorationSite[] {
   return state.availableSiteIds
     .filter((siteId) => !state.locationProgress[siteId]?.cleared)
     .map(getSite);
-}
-
-export function getRelic(relicId: RelicId): Relic {
-  const relic = RELICS.find((candidate) => candidate.id === relicId);
-  if (!relic) throw new Error(`unknown relic: ${relicId}`);
-  return relic;
-}
-
-export function hasRelic(state: GameState, relicId: RelicId): boolean {
-  return state.relics.includes(relicId);
-}
-
-export function getForecastSites(state: GameState): ExplorationSite[] {
-  if (!hasRelic(state, 'roadAtlas') && state.player.intellect < 8) return [];
-  const forecast = clone(state);
-  forecast.base.routeProgress = clamp(forecast.base.routeProgress + 28 + growthRank(state, 'fieldcraft') * 6, 0, CONFIG.escapeDistance);
-  forecast.availableSiteIds = generateAvailableSiteIds(forecast, () => 0.62);
-  return getAvailableSites(forecast);
 }
 
 export function getSiteProfile(state: GameState, siteId: SiteId): SiteProfile {
@@ -380,7 +367,12 @@ export function startExploration(prev: GameState, siteId: SiteId, rng: () => num
   state.base.timeLeft -= profile.timeCost;
   state.lastSiteId = siteId;
   state.player.stamina = clamp(state.player.stamina + 2, 0, state.player.maxStamina);
-  advanceLocationProgress(state, site, profile);
+  advanceLocationProgress(state, site, profile).forEach((message) => pushJournal(state, message));
+  if (state.locationProgress[site.id]?.cleared) {
+    state.availableSiteIds = state.routeBlockade
+      ? routeBlockadeSiteChoices(state.routeBlockade).filter((candidate) => !state.locationProgress[candidate]?.cleared)
+      : generateAvailableSiteIds(state, () => 0.5);
+  }
   pushJournal(state, `${site.name}へ向かう。時間-${profile.timeCost}h、残り${state.base.timeLeft}h。${site.rewardHint}。危険度${profile.danger} / 見返りx${profile.rewardMultiplier.toFixed(2)} / 希少${Math.round(profile.rareChance * 100)}%。`);
   if (pushingDeeper) {
     pushJournal(state, `さらに奥へ踏み込む。探索深度${state.expeditionDepth}、脅威${state.threat}。良い物は増えるが、退路も騒がしくなる。`);
@@ -718,20 +710,13 @@ export function resolveEventOption(prev: GameState, choiceId: EventChoiceId): Ga
     if (state.base.materials >= box.toolsCost) {
       state.base.materials -= box.toolsCost;
       pushJournal(state, `資材${box.toolsCost}で${box.name}を丁寧に開ける。`);
-      resolveBoxSpecial(state, site, profile, box, rewardBase);
+      resolveBoxCarefulOpen(state, site, profile, box, rewardBase);
     } else {
       const reward = scaleReward(rewardBase, Math.max(0.25, box.safeScale - 0.1) * profile.rewardMultiplier);
       addResources(state.haul, reward);
       pushJournal(state, `工具が足りず、${box.name}の隙間から取れる分だけ抜いた。${resourceText(reward)}を未積載の荷物へ。`);
     }
   } else {
-    if (choiceId === 'special') {
-      resolveBoxSpecial(state, site, profile, box, rewardBase);
-      state.event = null;
-      state.phase = 'aftermath';
-      checkGameEnd(state);
-      return state;
-    }
     damageWeapon(state, box.boldWeaponDamage);
     state.threat = clamp(state.threat + 1, 0, 12);
     const reward = scaleReward(rewardBase, box.boldScale * profile.rewardMultiplier);
@@ -1267,121 +1252,7 @@ function createEvent(site: ExplorationSite, rng: () => number): EventState {
   if (roll(rng) >= 0.48) return createStoryEvent(site, rng);
 
   const box = pickBoxType(site.id, rng);
-  const scene = eventVignette(site.id, rng);
-  const toolsDetail = `${box.toolsCost > 0 ? `資材${box.toolsCost}。` : ''}${box.specialLabel}: ${box.specialDetail}`;
-  return {
-    kind: 'box',
-    siteId: site.id,
-    boxId: box.id,
-    title: `${site.name}の${box.name}`,
-    description: `${scene} ${box.description} 静かに済ませるか、道具で価値を上げるか、音を立てて大きく取るか。`,
-    choices: [
-      { id: 'safe', label: '静かに少し取る', detail: '中身は少なめ。STA-1。周囲を騒がせない。' },
-      { id: 'tools', label: '道具で価値を上げる', detail: toolsDetail },
-      { id: 'bold', label: '音を立てて奪う', detail: `大きめの回収${box.rareOnBold ? 'と希少発見' : ''}。武器状態-${box.boldWeaponDamage}、脅威+1。` }
-    ]
-  };
-}
-
-function createStoryEvent(site: ExplorationSite, rng: () => number): EventState {
-  const kinds = storyEventKinds(site.id);
-  const kind = pick(kinds, rng);
-  const titleByKind: Record<EventKind, string> = {
-    box: '物資箱',
-    road: '詰まった道',
-    signal: '無線のノイズ',
-    vehicle: '避難車の異音',
-    survivor: '生存者の痕跡'
-  };
-  const descriptions: Record<EventKind, string[]> = {
-    box: [''],
-    road: [
-      '放置車両の列が道をふさいでいる。荷台には使える物がありそうだが、長居すれば周囲が騒がしくなる。',
-      '草に埋もれた脇道がある。少し調べれば抜け道になるかもしれないが、足跡も新しい。'
-    ],
-    signal: [
-      '車載無線に途切れ途切れの声が混じる。近いのか、古い録音なのか判然としない。',
-      '検問所の無線機が短い符号を吐いた。座標らしい数字だけが聞き取れる。'
-    ],
-    vehicle: [
-      '避難車の床下から嫌な金属音がした。今なら処置できるが、時間は食う。',
-      '燃料の匂いが少し濃い。漏れか、近くのタンクの匂いか、判断がつかない。'
-    ],
-    survivor: [
-      'ドアに新しい爪痕と、子どもの字のメモが残っている。誰かがここを通った。',
-      '棚の裏に、布で包まれた小さな備蓄と短い謝罪文が隠されている。'
-    ]
-  };
-  return {
-    kind,
-    siteId: site.id,
-    title: `${site.name} / ${titleByKind[kind]}`,
-    description: pick(descriptions[kind], rng),
-    choices: storyEventChoices(kind)
-  };
-}
-
-function storyEventKinds(siteId: SiteId): EventKind[] {
-  if (siteId === 'road') return ['road', 'vehicle', 'survivor'];
-  if (siteId === 'gas') return ['vehicle', 'road', 'signal'];
-  if (siteId === 'checkpoint') return ['signal', 'survivor', 'road'];
-  if (siteId === 'clinic') return ['survivor', 'signal', 'vehicle'];
-  return ['survivor', 'road', 'signal'];
-}
-
-function storyEventChoices(kind: EventKind): EventState['choices'] {
-  if (kind === 'road') {
-    return [
-      { id: 'safe', label: '遠巻きに確認', detail: 'STA-1。少量の資材。脅威は上げない。' },
-      { id: 'tools', label: '車列を動かす', detail: '資材1。道を開き、進行と資材を得る。' },
-      { id: 'bold', label: '荷台まで踏み込む', detail: '報酬多め。時間-1h、脅威+1。' }
-    ];
-  }
-  if (kind === 'signal') {
-    return [
-      { id: 'safe', label: '短く聞く', detail: '士気+2。危険は小さい。' },
-      { id: 'tools', label: 'アンテナを直す', detail: '資材1。候補を更新し、少し進路を読む。' },
-      { id: 'bold', label: 'こちらから呼ぶ', detail: '士気と希少発見。脅威+2。' }
-    ];
-  }
-  if (kind === 'vehicle') {
-    return [
-      { id: 'safe', label: '音を聞き分ける', detail: '時間-1h。燃料漏れを避け、士気+1。' },
-      { id: 'tools', label: 'その場で補修', detail: '資材1。車体または燃料を守る。' },
-      { id: 'bold', label: '押して走る', detail: '進行を得るが、車体に負担。' }
-    ];
-  }
-  return [
-    { id: 'safe', label: '印だけ残す', detail: '士気+2。物資には触れない。' },
-    { id: 'tools', label: '食料を分ける', detail: '食料1。薬品や情報、士気を得る。' },
-    { id: 'bold', label: '備蓄を持ち出す', detail: '物資多め。士気-3、脅威+1。' }
-  ];
-}
-
-function eventVignette(siteId: SiteId, rng: () => number): string {
-  const scenes: Record<SiteId, string[]> = {
-    store: [
-      '非常灯の赤だけがまだ点滅し、床に古い足跡が重なっている。',
-      '奥の倉庫から缶が転がる音がした。誰かが急いで隠した跡がある。'
-    ],
-    clinic: [
-      '処置室のカーテンが風もないのに揺れている。薬棚には新しい指の跡が残る。',
-      '受付端末の割れた画面に、最後の患者名簿が焼き付いている。'
-    ],
-    road: [
-      '横転した配送車の荷台が半開きで、草むらの奥へタイヤ跡が続いている。',
-      '道路脇の標識に新しい布切れが結ばれている。誰かの目印かもしれない。'
-    ],
-    gas: [
-      '給油機の下に新しい油染みがある。タンクは空ではないかもしれない。',
-      '割れた事務所の窓から、携行缶の金属音が小さく響いた。'
-    ],
-    checkpoint: [
-      '土嚢の間に薬莢が散っている。最後の撃ち合いはそれほど古くない。',
-      '検問所の無線機が一瞬だけ砂嵐のような音を吐いた。'
-    ]
-  };
-  return pick(scenes[siteId], rng);
+  return createBoxEvent(site, box, rng);
 }
 
 function resolveStoryEvent(state: GameState, site: ExplorationSite, profile: SiteProfile, choiceId: EventChoiceId) {
@@ -1419,12 +1290,6 @@ function resolveStoryEvent(state: GameState, site: ExplorationSite, profile: Sit
       pushJournal(state, `荷台へ踏み込み、時間-1h、脅威+1。${resourceText(reward)}を未積載の荷物へ。`);
       return;
     }
-    const km = 4 + Math.floor(state.player.intellect / 3) + growthRank(state, 'fieldcraft') * 2;
-    const progressBefore = state.base.routeProgress;
-    state.base.routeProgress = clamp(state.base.routeProgress + km, 0, CONFIG.escapeDistance);
-    applyRouteGate(state, progressBefore);
-    state.base.morale = clamp(state.base.morale + 2, 0, 100);
-    pushJournal(state, `抜け道を記録。進行+${km}km、士気+2。次の運転で迷いが減る。`);
     return;
   }
 
@@ -1455,11 +1320,6 @@ function resolveStoryEvent(state: GameState, site: ExplorationSite, profile: Sit
       pushJournal(state, `こちらから呼びかけた。士気+5、脅威+2。返答の座標から希少物資の手がかりを得た。`);
       return;
     }
-    const km = state.player.intellect >= 7 ? 7 : 4;
-    const progressBefore = state.base.routeProgress;
-    state.base.routeProgress = clamp(state.base.routeProgress + km, 0, CONFIG.escapeDistance);
-    applyRouteGate(state, progressBefore);
-    pushJournal(state, `座標を書き写した。知性でノイズを読み分け、進行+${km}km。`);
     return;
   }
 
@@ -1490,11 +1350,6 @@ function resolveStoryEvent(state: GameState, site: ExplorationSite, profile: Sit
       pushJournal(state, `異音を無視して押し切った。進行+6km、車体-1。`);
       return;
     }
-    const reward = state.backgroundId === 'mechanic'
-      ? { food: 0, materials: 3, medicine: 0, ammo: 0, grenades: 0, fuel: 1 }
-      : { food: 0, materials: 2, medicine: 0, ammo: 0, grenades: 0, fuel: 0 };
-    addResources(state.haul, reward);
-    pushJournal(state, `整備記録を残し、使える部品を外した。${resourceText(reward)}を未積載の荷物へ。`);
     return;
   }
 
@@ -1523,12 +1378,9 @@ function resolveStoryEvent(state: GameState, site: ExplorationSite, profile: Sit
     pushJournal(state, `隠し備蓄を持ち出した。${resourceText(reward)}を未積載の荷物へ。士気-3、脅威+1。`);
     return;
   }
-  if (state.player.intellect >= 7 || state.backgroundId === 'medic') maybeGrantRareFind(state, site, () => 0);
-  state.base.morale = clamp(state.base.morale + (state.backgroundId === 'medic' ? 4 : 2), 0, 100);
-  pushJournal(state, `メモを読み、通った人の意図を汲んだ。士気+${state.backgroundId === 'medic' ? 4 : 2}${state.player.intellect >= 7 || state.backgroundId === 'medic' ? '、希少発見の手がかり。' : '。'}`);
 }
 
-function resolveBoxSpecial(state: GameState, site: ExplorationSite, profile: SiteProfile, box: BoxType, rewardBase: Resources) {
+function resolveBoxCarefulOpen(state: GameState, site: ExplorationSite, profile: SiteProfile, box: BoxType, rewardBase: Resources) {
   state.player.stamina = clamp(state.player.stamina - 2, 0, state.player.maxStamina);
 
   if (box.id === 'foodCrate') {
@@ -1699,77 +1551,11 @@ function maybeGrantRareFind(state: GameState, site: ExplorationSite, rng: () => 
   pushJournal(state, `希少発見: ${site.rareHint}。追加で${resourceText(rare)}。`);
 }
 
-function advanceLocationProgress(state: GameState, site: ExplorationSite, profile: SiteProfile) {
-  const progress = state.locationProgress[site.id];
-  if (!progress || progress.cleared) return;
-
-  progress.progress = clamp(progress.progress + 1, 0, progress.required);
-  pushJournal(state, `${site.name}: 調査進行 ${progress.progress}/${progress.required}。`);
-  if (progress.progress < progress.required) return;
-
-  progress.cleared = true;
-  const reward = locationClearReward(profile);
-  if (hasAnyResource(reward)) addResources(state.haul, reward);
-  const upgrade = applyLocationClearUpgrade(state, site.id);
-  pushJournal(state, `${site.name}を漁り切った。確保品 ${resourceText(reward)}。${upgrade}以後、この場所は候補に出ない。`);
-  state.availableSiteIds = state.routeBlockade
-    ? routeBlockadeSiteChoices(state.routeBlockade).filter((siteId) => !state.locationProgress[siteId]?.cleared)
-    : generateAvailableSiteIds(state, () => 0.5);
-}
-
-function grantRelic(state: GameState, relicId: RelicId): string {
-  if (state.relics.includes(relicId)) return '';
-  state.relics.push(relicId);
-  const relic = getRelic(relicId);
-  return `レリック入手: ${relic.name}。`;
-}
-
-function locationClearReward(site: ExplorationSite): Resources {
-  const reward = completionReward(site);
-  if (site.id === 'store') return { ...reward, food: reward.food + 4, medicine: reward.medicine + 1 };
-  if (site.id === 'clinic') return { ...reward, medicine: reward.medicine + 3, materials: reward.materials + 1 };
-  if (site.id === 'road') return { ...reward, materials: reward.materials + 4, fuel: reward.fuel + 1 };
-  if (site.id === 'gas') return { ...reward, fuel: reward.fuel + 5, materials: reward.materials + 1 };
-  return { ...reward, materials: reward.materials + 2, ammo: reward.ammo + 4, grenades: reward.grenades + 1 };
-}
-
-function applyLocationClearUpgrade(state: GameState, siteId: SiteId): string {
-  if (siteId === 'clinic') {
-    state.base.infirmaryLevel += 1;
-    return `処置台を移設し、救護棚+1。${grantRelic(state, 'triageManual')}`;
-  }
-  if (siteId === 'gas') {
-    state.base.defense += 1;
-    return `外装パネルを拾い、車体+1。${grantRelic(state, 'luckyBolt')}`;
-  }
-  if (siteId === 'road') {
-    state.weapon.maxCondition += 2;
-    state.weapon.condition = clamp(state.weapon.condition + 2, 0, state.weapon.maxCondition);
-    return `工具で武器耐久上限+2。${grantRelic(state, 'roadAtlas')}`;
-  }
-  if (siteId === 'checkpoint') {
-    state.weapon.maxCondition += 3;
-    state.weapon.condition = clamp(state.weapon.condition + 3, 0, state.weapon.maxCondition);
-    return `武器部品で武器耐久上限+3。${grantRelic(state, 'ammoGauge')}`;
-  }
-
-  state.base.morale = clamp(state.base.morale + 4, 0, 100);
-  return `保存食の目録で士気+4。${grantRelic(state, 'luckyBolt')}`;
-}
-
 function rareReward(site: ExplorationSite): Resources {
   if (site.id === 'clinic') return { food: 0, materials: 0, medicine: 2 + site.danger, ammo: 0, grenades: 0, fuel: 0 };
   if (site.id === 'store') return { food: 3 + site.danger, materials: 1, medicine: 0, ammo: 1, grenades: 0, fuel: 0 };
   if (site.id === 'checkpoint') return { food: 0, materials: 3 + site.danger, medicine: 0, ammo: 2, grenades: 1, fuel: 1 };
   return { food: 0, materials: 3 + site.danger, medicine: 0, ammo: 2, grenades: 0, fuel: 1 };
-}
-
-function completionReward(site: ExplorationSite): Resources {
-  const bonus = Math.max(1, site.danger - 1);
-  if (site.id === 'clinic') return { food: 0, materials: 0, medicine: 1 + bonus, ammo: 0, grenades: 0, fuel: 0 };
-  if (site.id === 'store') return { food: 2 + bonus, materials: 0, medicine: 0, ammo: 0, grenades: 0, fuel: 0 };
-  if (site.id === 'checkpoint') return { food: 0, materials: 2 + bonus, medicine: 0, ammo: 2, grenades: 1, fuel: 1 };
-  return { food: 0, materials: 2 + bonus, medicine: 0, ammo: 1, grenades: 0, fuel: 1 };
 }
 
 function getGrowthChoice(choiceId: GrowthChoiceId): GrowthChoice {

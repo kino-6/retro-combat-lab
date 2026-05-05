@@ -38,7 +38,7 @@
 - `src/game.ts`
   - `GameState` の状態遷移の中心。
   - `chooseBackground`, `startExploration`, `stepCombat`, `returnToBase`, `endDay` など。
-  - 現在まだ大きい。今後さらに `eventRules.ts`, `baseActions.ts`, `combatFlow.ts` へ分割候補。
+  - 現在まだ大きい。レリックやロケーション進行のような独立ルールは別ファイルへ逃がす方針。
 - `src/gameTypes.ts`
   - 型定義のみ。
 - `src/gameData.ts`
@@ -50,8 +50,15 @@
   - 命中率、期待ダメージ、ダメージロール。
 - `src/exploration.ts`
   - エンカウント構築、日替わり条件、タグ、箱、初期距離。
+- `src/eventMessages.ts`
+  - 選択イベントのタイトル、説明、選択肢文言。
+  - YAML化しやすいテーブル構造だが、現状はビルドを軽く保つためTSで管理する。
 - `src/route.ts`
   - 脱出距離、夜間走行、進行距離による探索候補の変化。
+- `src/siteProgress.ts`
+  - ロケーション調査進行度、クリア報酬、クリア時の車両/武器/救護棚強化。
+- `src/relics.ts`
+  - レリック取得、レリック保有判定、候補地の先読み。
 - `src/resources.ts`
   - 資源の加算、空リソース、報酬倍率、資源表示テキスト。
 - `src/characterRules.ts`
@@ -85,6 +92,13 @@
   - `src/exploration.ts`
   - `src/route.ts`
 
+- ロケーションを漁り切った時の報酬を変える
+  - `src/siteProgress.ts`
+
+- レリックや先読みを変える
+  - `src/gameData.ts` の `RELICS`
+  - `src/relics.ts`
+
 - 画面情報量を整理する
   - HTMLパネルは `src/main.ts`
   - Canvas描画は `src/sceneRenderer.ts`
@@ -105,7 +119,7 @@
 次に分けるなら、この順が安全です。
 
 1. `src/eventRules.ts`
-   - `createEvent`, `resolveBoxSpecial`, `getBoxType`, `eventVignette`
+   - `createEvent`, `resolveBoxCarefulOpen`, `resolveStoryEvent`
 2. `src/combatFlow.ts`
    - `enemyAct`, `winCombat`, `createEnemy`, `maybeAttractEnemyByGunshot`
 3. `src/baseActions.ts`

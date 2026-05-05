@@ -180,6 +180,7 @@ function renderPhasePanel(): string {
   }
 
   if (state.phase === 'event' && state.event) {
+    const eventChoices = state.event.choices.slice(0, 3);
     return `
       <section class="panel command-panel">
         <div class="panel-head">
@@ -188,7 +189,7 @@ function renderPhasePanel(): string {
         </div>
         <p class="summary">${state.event.description}</p>
         <div class="event-grid">
-          ${state.event.choices.map((choice, index) => `
+          ${eventChoices.map((choice, index) => `
             <button data-action="event" data-choice="${choice.id}">
               ${buttonText(String(index + 1), choice.label)}
               <small>${choice.detail}</small>
@@ -469,8 +470,43 @@ function renderRiskPanel(): string {
       ${lootTotal > 0
         ? `<div class="risk-loot"><div class="small-note">未積載の荷物</div><div class="haul-row compact">${resourcePills(state.haul)}</div></div>`
         : `<p class="small-note">${inField ? 'まだ抱えている荷物はありません。' : '車内に積載済み。探索中の荷物はありません。'}</p>`}
-      ${forecast.length ? `<div class="forecast-box"><b>先読み</b><span>${forecast.map((site) => site.name).join(' → ')}</span><small>地図/知性で、次に濃くなりそうな候補を読む。</small></div>` : ''}
+      ${renderRouteMiniMap(forecast)}
     </section>
+  `;
+}
+
+function renderRouteMiniMap(forecast: ReturnType<typeof getForecastSites>): string {
+  const progress = Math.round((state.base.routeProgress / CONFIG.escapeDistance) * 100);
+  const checkpoint = Math.round((CONFIG.checkpointGateKm / CONFIG.escapeDistance) * 100);
+  const finalGate = Math.round((CONFIG.finalGateKm / CONFIG.escapeDistance) * 100);
+  const forecastLabel = forecast.length ? forecast.map((site) => site.name).join(' / ') : '候補なし';
+  const readDepth = state.relics.includes('roadAtlas')
+    ? '道路地図で遠めまで読む'
+    : state.player.intellect >= 8
+      ? '知性で少し先を読む'
+      : '近い先だけ読む';
+  return `
+    <div class="route-minimap">
+      <div class="route-map-head">
+        <b>ルート</b>
+        <span>${state.base.routeProgress}/${CONFIG.escapeDistance}km</span>
+      </div>
+      <div class="route-track" aria-label="退避線までの進行">
+        <span class="route-fill" style="width:${progress}%"></span>
+        <i class="route-marker checkpoint" style="left:${checkpoint}%"></i>
+        <i class="route-marker final" style="left:${finalGate}%"></i>
+      </div>
+      <div class="route-map-labels">
+        <span>現在</span>
+        <span>検問</span>
+        <span>退避線</span>
+      </div>
+      <div class="forecast-box">
+        <b>先読み</b>
+        <span>${forecastLabel}</span>
+        <small>${readDepth}。次に濃くなりそうな候補。</small>
+      </div>
+    </div>
   `;
 }
 
@@ -540,7 +576,7 @@ function wireButtons() {
 function performAction(action: string | undefined, siteId?: SiteId, backgroundId?: BackgroundId, choiceId?: string, growthId?: GrowthChoiceId) {
   if (!action) return;
   if (action === 'background' && backgroundId) state = chooseBackground(state, backgroundId);
-  if (action === 'event' && choiceId) state = resolveEventOption(state, choiceId as 'safe' | 'tools' | 'bold' | 'special');
+  if (action === 'event' && choiceId) state = resolveEventOption(state, choiceId as 'safe' | 'tools' | 'bold');
   if (action === 'growth' && growthId) state = chooseGrowth(state, growthId);
   if (action === 'explore' && siteId) state = startExploration(state, siteId, Math.random);
   if (action === 'return') state = returnToBase(state);
